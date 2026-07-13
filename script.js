@@ -25,33 +25,44 @@ SITE_INVENTORY.forEach((row) => {
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
+// --- Edições manuais persistidas no navegador (localStorage) ---
+const OVERRIDES_KEY = "gestaoSitesOverrides";
+
+function loadOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(OVERRIDES_KEY)) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveOverride(sigla, patch) {
+  const all = loadOverrides();
+  all[sigla] = { ...all[sigla], ...patch };
+  localStorage.setItem(OVERRIDES_KEY, JSON.stringify(all));
+}
+
+const OVERRIDES = loadOverrides();
+
 function buildAssociacoes() {
   return ASSOCIATIONS_CRM.map((a) => {
     const key = norm(a.sigla);
     const vercel = VERCEL_ASSOC_N[key] || null;
-    const localFolder = LOCAL_FOLDER_ASSOC_N[key] || null;
+    const nivel = NIVEL_OVERRIDE_N[key] || null;
     const inventoryRows = SITE_INVENTORY_BY_SIGLA[key] || [];
     const institucional = inventoryRows.find((r) => !r.evento) || null;
 
-    const siteStatus = vercel ? "vercel" : "wordpress";
-    const dominio = (vercel && vercel.dominio) || (institucional && institucional.site) || null;
-    const nivel = NIVEL_OVERRIDE_N[key] || null;
+    const defaultSiteAtual = vercel ? (nivel === "B" || nivel === "C" ? "hotsite" : "personalizado") : "wordpress";
+    const defaultLink = (vercel && vercel.dominio) || (institucional && institucional.site) || "";
 
-    const obsParts = [];
-    if (vercel) obsParts.push(`Já migrado (projeto Vercel ${vercel.project})`);
-    if (localFolder) obsParts.push(`Ajuste local em curso: ${localFolder}/`);
+    const saved = OVERRIDES[a.sigla] || {};
 
     return {
       sigla: a.sigla,
       nome: a.nome,
       health: a.health,
-      statusCrm: a.statusCrm,
-      mrr: a.mrr,
-      nivel,
-      siteStatus,
-      vercelProject: vercel ? vercel.project : null,
-      dominio,
-      obs: obsParts.join(" · "),
+      siteAtual: saved.siteAtual || defaultSiteAtual,
+      link: saved.link != null ? saved.link : defaultLink,
     };
   });
 }
@@ -126,10 +137,17 @@ function healthBadge(health) {
   return `<span class="badge ${cls}">${label}</span>`;
 }
 
-function nivelBadge(nivel) {
-  if (nivel === "A") return '<span class="badge nivel-a">A · personalizado</span>';
-  if (nivel === "B" || nivel === "C") return `<span class="badge nivel-bc">${nivel} · hotsite</span>`;
-  return '<span class="badge nivel-none">A definir</span>';
+const SITE_ATUAL_OPTIONS = [
+  { value: "wordpress", label: "WordPress" },
+  { value: "personalizado", label: "Personalizado" },
+  { value: "hotsite", label: "Hotsite" },
+];
+
+function siteAtualSelect(sigla, current) {
+  const opts = SITE_ATUAL_OPTIONS.map(
+    (o) => `<option value="${o.value}" ${o.value === current ? "selected" : ""}>${o.label}</option>`
+  ).join("");
+  return `<select class="site-select" data-sigla="${sigla}">${opts}</select>`;
 }
 
 function siteStatusBadge(status) {
@@ -162,23 +180,24 @@ function renderAssocStats(list) {
   const total = list.length;
   const saudavel = list.filter((a) => a.health === "saudavel").length;
   const atencaoRisco = list.filter((a) => a.health === "atencao" || a.health === "risco").length;
-  const cancelado = list.filter((a) => a.health === "cancelado").length;
-  const noVercel = list.filter((a) => a.siteStatus === "vercel").length;
-  const mrrTotal = list.reduce((sum, a) => sum + (a.mrr || 0), 0);
+  const wordpress = list.filter((a) => a.siteAtual === "wordpress").length;
+  const personalizado = list.filter((a) => a.siteAtual === "personalizado").length;
+  const hotsite = list.filter((a) => a.siteAtual === "hotsite").length;
 
   const cards = [
     { value: total, label: "Associações" },
     { value: saudavel, label: "Saudáveis" },
     { value: atencaoRisco, label: "Atenção / risco" },
-    { value: cancelado, label: "Canceladas" },
-    { value: noVercel, label: "Já no Vercel" },
-    { value: currency.format(mrrTotal), label: "MRR total" },
+    { value: wordpress, label: "WordPress" },
+    { value: personalizado, label: "Personalizado" },
+    { value: hotsite, label: "Hotsite" },
   ];
 
   document.getElementById("assoc-stats").innerHTML = cards
     .map((c) => `<div class="stat-card"><div class="value">${c.value}</div><div class="label">${c.label}</div></div>`)
     .join("");
 
+  const cancelado = list.filter((a) => a.health === "cancelado").length;
   const healthBar = [
     { key: "saudavel", cls: "bar-ok", count: saudavel },
     { key: "atencao", cls: "bar-warn", count: list.filter((a) => a.health === "atencao").length },
@@ -193,7 +212,7 @@ function renderAssocStats(list) {
 function renderAssocTable(list) {
   const tbody = document.getElementById("assoc-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Nenhuma associação encontrada com esses filtros.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Nenhuma associação encontrada com esses filtros.</td></tr>';
     return;
   }
   tbody.innerHTML = list
@@ -201,11 +220,8 @@ function renderAssocTable(list) {
       (a) => `<tr>
         <td><div class="name-cell"><span class="avatar">${initials(a.sigla)}</span><div><strong>${a.sigla}</strong><div class="muted small">${a.nome || "—"}</div></div></div></td>
         <td>${healthBadge(a.health)}</td>
-        <td class="muted">${a.statusCrm || "—"}</td>
-        <td>${a.mrr != null ? currency.format(a.mrr) : '<span class="muted">—</span>'}</td>
-        <td>${nivelBadge(a.nivel)}</td>
-        <td>${siteStatusBadge(a.siteStatus)}<br/>${domainLink(a.dominio)}</td>
-        <td class="muted small">${a.obs || "—"}</td>
+        <td>${siteAtualSelect(a.sigla, a.siteAtual)}</td>
+        <td><input class="site-link" type="text" data-sigla="${a.sigla}" value="${(a.link || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
       </tr>`
     )
     .join("");
@@ -215,19 +231,33 @@ function applyAssocFilters() {
   const q = document.getElementById("assoc-search").value.trim().toLowerCase();
   const health = document.getElementById("assoc-filter-health").value;
   const site = document.getElementById("assoc-filter-site").value;
-  const nivel = document.getElementById("assoc-filter-nivel").value;
 
   const filtered = ASSOCIACOES.filter((a) => {
     if (q && !`${a.sigla} ${a.nome || ""}`.toLowerCase().includes(q)) return false;
     if (health && a.health !== health) return false;
-    if (site && a.siteStatus !== site) return false;
-    if (nivel === "none" && a.nivel) return false;
-    if (nivel && nivel !== "none" && a.nivel !== nivel) return false;
+    if (site && a.siteAtual !== site) return false;
     return true;
   });
 
   renderAssocStats(filtered);
   renderAssocTable(filtered);
+}
+
+function handleAssocEdit(ev) {
+  const el = ev.target;
+  const sigla = el.dataset.sigla;
+  if (!sigla) return;
+  const assoc = ASSOCIACOES.find((a) => a.sigla === sigla);
+  if (!assoc) return;
+
+  if (el.classList.contains("site-select")) {
+    assoc.siteAtual = el.value;
+    saveOverride(sigla, { siteAtual: el.value });
+    applyAssocFilters();
+  } else if (el.classList.contains("site-link")) {
+    assoc.link = el.value;
+    saveOverride(sigla, { link: el.value });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -326,12 +356,14 @@ function init() {
   applyAssocFilters();
   applyEventoFilters();
 
-  ["assoc-search", "assoc-filter-health", "assoc-filter-site", "assoc-filter-nivel"].forEach((id) => {
+  ["assoc-search", "assoc-filter-health", "assoc-filter-site"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyAssocFilters);
   });
   ["evento-search", "evento-filter-tipo", "evento-filter-site"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyEventoFilters);
   });
+
+  document.getElementById("assoc-table-body").addEventListener("change", handleAssocEdit);
 }
 
 document.addEventListener("DOMContentLoaded", init);
