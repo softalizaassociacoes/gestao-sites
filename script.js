@@ -44,6 +44,25 @@ function saveOverride(sigla, patch) {
 
 const OVERRIDES = loadOverrides();
 
+// --- Edições manuais de eventos (chave própria, indexada por id do evento) ---
+const EVENT_OVERRIDES_KEY = "gestaoSitesEventOverrides";
+
+function loadEventOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(EVENT_OVERRIDES_KEY)) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveEventOverride(id, patch) {
+  const all = loadEventOverrides();
+  all[id] = { ...all[id], ...patch };
+  localStorage.setItem(EVENT_OVERRIDES_KEY, JSON.stringify(all));
+}
+
+const EVENT_OVERRIDES = loadEventOverrides();
+
 function buildAssociacoes() {
   return ASSOCIATIONS_CRM.map((a) => {
     const key = norm(a.sigla);
@@ -68,54 +87,54 @@ function buildAssociacoes() {
   });
 }
 
+const STATUS_MANUAL_OPTIONS = [
+  { value: "a_acontecer", label: "A acontecer" },
+  { value: "acontecendo", label: "Acontecendo" },
+  { value: "realizado", label: "Realizado" },
+];
+
 function buildEventos() {
   const fromCrm = EVENTS_CRM.map((e) => {
     const vercel = VERCEL_EVENT[e.id] || null;
-    const localFolder = LOCAL_FOLDER_EVENT[e.id] || null;
-    const dominio = (vercel && vercel.dominio) || e.siteUrl || null;
-    const siteStatus = vercel ? "vercel" : e.temSite ? "site_proprio" : localFolder ? "wordpress" : "sem_site";
-
-    const obsParts = [];
-    if (vercel) obsParts.push(`Já migrado (projeto Vercel ${vercel.project})`);
-    if (localFolder) obsParts.push(`Ajuste local em curso: ${localFolder}/`);
+    const link = (vercel && vercel.dominio) || e.siteUrl || "";
+    const defaultStatusManual = e.status === "encerrado" ? "realizado" : "a_acontecer";
+    const saved = EVENT_OVERRIDES[e.id] || {};
 
     return {
-      fonte: "cshub",
+      id: e.id,
       sigla: e.sigla,
       associacao: e.associacao,
       nome: e.nome,
       shortName: e.shortName,
       edicao: e.edicao,
       ano: e.ano,
-      tipo: e.tipo,
-      status: e.status,
-      temSite: e.temSite,
-      dominio,
       cidade: e.cidade,
       estado: e.estado,
-      siteStatus,
-      obs: obsParts.join(" · "),
+      statusManual: saved.statusManual || defaultStatusManual,
+      link: saved.link != null ? saved.link : link,
+      removed: !!saved.removed,
     };
   });
 
-  const crmDominios = new Set(fromCrm.map((e) => e.dominio).filter(Boolean));
-  const fromSheetOnly = SITE_INVENTORY.filter((r) => r.evento && !crmDominios.has(r.site)).map((r) => ({
-    fonte: "planilha",
-    sigla: r.sigla,
-    associacao: null,
-    nome: r.nome,
-    shortName: null,
-    edicao: null,
-    ano: null,
-    tipo: r.area,
-    status: null,
-    temSite: true,
-    dominio: r.site,
-    cidade: null,
-    estado: null,
-    siteStatus: "site_proprio",
-    obs: "Fonte: planilha de inventário (sem registro correspondente no CS Hub)",
-  }));
+  const crmLinks = new Set(fromCrm.map((e) => e.link).filter(Boolean));
+  const fromSheetOnly = SITE_INVENTORY.filter((r) => r.evento && !crmLinks.has(r.site)).map((r, i) => {
+    const id = `sheet-${i}`;
+    const saved = EVENT_OVERRIDES[id] || {};
+    return {
+      id,
+      sigla: r.sigla,
+      associacao: null,
+      nome: r.nome,
+      shortName: null,
+      edicao: null,
+      ano: null,
+      cidade: null,
+      estado: null,
+      statusManual: saved.statusManual || "realizado",
+      link: saved.link != null ? saved.link : r.site,
+      removed: !!saved.removed,
+    };
+  });
 
   return [...fromCrm, ...fromSheetOnly];
 }
@@ -151,22 +170,15 @@ function siteAtualSelect(sigla, current) {
   return `<select class="site-select" data-sigla="${sigla}">${opts}</select>`;
 }
 
-function siteStatusBadge(status) {
-  const map = {
-    vercel: ["No Vercel", "site-vercel"],
-    wordpress: ["WordPress", "site-wordpress"],
-    site_proprio: ["Site próprio", "site-proprio"],
-    sem_site: ["Sem site", "site-none"],
-  };
-  const [label, cls] = map[status] || ["—", "site-none"];
-  return `<span class="badge ${cls}">${label}</span>`;
+function statusManualSelect(id, current) {
+  const opts = STATUS_MANUAL_OPTIONS.map(
+    (o) => `<option value="${o.value}" ${o.value === current ? "selected" : ""}>${o.label}</option>`
+  ).join("");
+  return `<select class="evento-status-select" data-id="${id}">${opts}</select>`;
 }
 
-function domainLink(dominio) {
-  if (!dominio) return '<span class="muted">—</span>';
-  const href = dominio.startsWith("http") ? dominio : `https://${dominio}`;
-  const label = dominio.replace(/^https?:\/\//, "").replace(/\/$/, "");
-  return `<a class="link" href="${href}" target="_blank" rel="noopener">${label}</a>`;
+function eventoLinkInput(id, value) {
+  return `<input class="evento-link" type="text" data-id="${id}" value="${(value || "").replace(/"/g, "&quot;")}" placeholder="https://..." />`;
 }
 
 function initials(text) {
@@ -291,17 +303,17 @@ function handleAssocClick(ev) {
 
 function renderEventoStats(list) {
   const total = list.length;
-  const comSite = list.filter((e) => e.temSite).length;
-  const semSite = total - comSite;
-  const noVercel = list.filter((e) => e.siteStatus === "vercel").length;
-  const emAjuste = list.filter((e) => e.siteStatus === "wordpress").length;
+  const aAcontecer = list.filter((e) => e.statusManual === "a_acontecer").length;
+  const acontecendo = list.filter((e) => e.statusManual === "acontecendo").length;
+  const realizado = list.filter((e) => e.statusManual === "realizado").length;
+  const comSite = list.filter((e) => e.link).length;
 
   const cards = [
     { value: total, label: "Eventos" },
+    { value: aAcontecer, label: "A acontecer" },
+    { value: acontecendo, label: "Acontecendo" },
+    { value: realizado, label: "Realizados" },
     { value: comSite, label: "Com site" },
-    { value: semSite, label: "Sem site" },
-    { value: noVercel, label: "Já no Vercel" },
-    { value: emAjuste, label: "Em ajuste (WordPress)" },
   ];
 
   document.getElementById("evento-stats").innerHTML = cards
@@ -312,7 +324,7 @@ function renderEventoStats(list) {
 function renderEventoTable(list) {
   const tbody = document.getElementById("evento-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Nenhum evento encontrado com esses filtros.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhum evento encontrado com esses filtros.</td></tr>';
     return;
   }
   tbody.innerHTML = list
@@ -323,9 +335,8 @@ function renderEventoTable(list) {
         <td><strong>${e.shortName || e.nome}</strong><div class="muted small">${e.nome}</div></td>
         <td class="muted">${e.associacao || e.sigla || "—"}</td>
         <td class="muted">${edicaoAno}${local ? `<div class="small">${local}</div>` : ""}</td>
-        <td class="muted">${e.tipo || "—"}</td>
-        <td>${siteStatusBadge(e.siteStatus)}<br/>${domainLink(e.dominio)}</td>
-        <td class="muted small">${e.obs || (e.fonte === "planilha" ? "Fonte: planilha" : "—")}</td>
+        <td>${statusManualSelect(e.id, e.statusManual)}</td>
+        <td>${eventoLinkInput(e.id, e.link)}</td>
       </tr>`;
     })
     .join("");
@@ -333,18 +344,33 @@ function renderEventoTable(list) {
 
 function applyEventoFilters() {
   const q = document.getElementById("evento-search").value.trim().toLowerCase();
-  const tipo = document.getElementById("evento-filter-tipo").value;
-  const site = document.getElementById("evento-filter-site").value;
+  const status = document.getElementById("evento-filter-status").value;
 
   const filtered = EVENTOS.filter((e) => {
     if (q && !`${e.nome} ${e.shortName || ""} ${e.associacao || ""} ${e.sigla || ""}`.toLowerCase().includes(q)) return false;
-    if (tipo && e.tipo !== tipo) return false;
-    if (site && e.siteStatus !== site) return false;
+    if (status && e.statusManual !== status) return false;
     return true;
   });
 
   renderEventoStats(filtered);
   renderEventoTable(filtered);
+}
+
+function handleEventoEdit(ev) {
+  const el = ev.target;
+  const id = el.dataset.id;
+  if (!id) return;
+  const evento = EVENTOS.find((e) => e.id === id);
+  if (!evento) return;
+
+  if (el.classList.contains("evento-status-select")) {
+    evento.statusManual = el.value;
+    saveEventOverride(id, { statusManual: el.value });
+    applyEventoFilters();
+  } else if (el.classList.contains("evento-link")) {
+    evento.link = el.value;
+    saveEventOverride(id, { link: el.value });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -363,20 +389,8 @@ function initTabs() {
   });
 }
 
-function populateEventoTipoOptions() {
-  const tipos = Array.from(new Set(EVENTOS.map((e) => e.tipo).filter(Boolean))).sort();
-  const select = document.getElementById("evento-filter-tipo");
-  tipos.forEach((t) => {
-    const opt = document.createElement("option");
-    opt.value = t;
-    opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
-    select.appendChild(opt);
-  });
-}
-
 function init() {
   initTabs();
-  populateEventoTipoOptions();
 
   applyAssocFilters();
   applyEventoFilters();
@@ -384,12 +398,13 @@ function init() {
   ["assoc-search", "assoc-filter-health", "assoc-filter-site", "assoc-show-removed"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyAssocFilters);
   });
-  ["evento-search", "evento-filter-tipo", "evento-filter-site"].forEach((id) => {
+  ["evento-search", "evento-filter-status"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyEventoFilters);
   });
 
   document.getElementById("assoc-table-body").addEventListener("change", handleAssocEdit);
   document.getElementById("assoc-table-body").addEventListener("click", handleAssocClick);
+  document.getElementById("evento-table-body").addEventListener("change", handleEventoEdit);
 }
 
 document.addEventListener("DOMContentLoaded", init);

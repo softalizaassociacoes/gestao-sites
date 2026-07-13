@@ -7,12 +7,12 @@
   <link rel="icon" type="image/svg+xml" href="logo.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="wrap">
-    <header class="top">
+  <header class="top">
+    <div class="top-inner">
       <div class="brand">
         <img class="brand-mark" src="logo.svg" alt="Softaliza" />
         <div>
@@ -20,13 +20,17 @@
           <p>Migração das associações e seus eventos para sites com identidade própria — Git + Vercel.</p>
         </div>
       </div>
-    </header>
+    </div>
+  </header>
 
-    <nav class="tabs">
+  <nav class="tabs-wrap">
+    <div class="tabs">
       <button class="tab-btn active" data-tab="assoc">Associações</button>
       <button class="tab-btn" data-tab="evento">Sites de Eventos</button>
-    </nav>
+    </div>
+  </nav>
 
+  <div class="wrap">
     <!-- ==================== ASSOCIAÇÕES ==================== -->
     <section id="panel-assoc" class="tab-panel active">
       <section class="stats" id="assoc-stats"></section>
@@ -75,15 +79,11 @@
 
       <div class="toolbar">
         <input type="text" id="evento-search" placeholder="Buscar por nome, sigla ou associação..." />
-        <select id="evento-filter-tipo">
-          <option value="">Todos os tipos</option>
-        </select>
-        <select id="evento-filter-site">
-          <option value="">Todo status de site</option>
-          <option value="vercel">No Vercel</option>
-          <option value="wordpress">Em ajuste (WordPress)</option>
-          <option value="site_proprio">Site próprio</option>
-          <option value="sem_site">Sem site</option>
+        <select id="evento-filter-status">
+          <option value="">Todo status</option>
+          <option value="a_acontecer">A acontecer</option>
+          <option value="acontecendo">Acontecendo</option>
+          <option value="realizado">Realizado</option>
         </select>
       </div>
 
@@ -94,9 +94,8 @@
               <th>Evento</th>
               <th>Associação</th>
               <th>Edição / Local</th>
-              <th>Tipo</th>
-              <th>Site atual</th>
-              <th>Observações</th>
+              <th>Status</th>
+              <th>Site</th>
             </tr>
           </thead>
           <tbody id="evento-table-body"></tbody>
@@ -105,8 +104,8 @@
     </section>
 
     <footer class="note">
-      Dados: CS Hub (associações e eventos) + planilha de inventário de sites. Mantidos em <code>data.js</code>.
-      Nível A/B/C ainda pendente de classificação para a maior parte da base.
+      Dados: CS Hub (associações e eventos) + planilha de inventário de sites. Mantidos em <code>data.js</code>;
+      edições manuais salvas no navegador.
     </footer>
   </div>
 
