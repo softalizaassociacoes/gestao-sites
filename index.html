@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestão de Sites — Associações & Congressos</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <h1>Gestão de Sites — Associações & Congressos</h1>
+      <p>Painel de acompanhamento da migração para sites com identidade própria (Git + Vercel).</p>
+    </header>
+
+    <section class="stats" id="stats"></section>
+
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Buscar por nome, sigla ou domínio..." />
+      <select id="filter-nivel">
+        <option value="">Todos os níveis</option>
+        <option value="A">Nível A</option>
+        <option value="B">Nível B</option>
+        <option value="C">Nível C</option>
+        <option value="none">Sem nível definido</option>
+      </select>
+      <select id="filter-status">
+        <option value="">Todos os status</option>
+        <option value="vercel">No Vercel</option>
+        <option value="wordpress">Em WordPress</option>
+      </select>
+      <select id="filter-tipo">
+        <option value="">Todos os tipos</option>
+        <option value="associacao">Associação</option>
+        <option value="congresso">Congresso</option>
+        <option value="none">A confirmar</option>
+      </select>
+    </div>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Nome / Sigla</th>
+            <th>Tipo</th>
+            <th>Nível</th>
+            <th>Status</th>
+            <th>Projeto Vercel</th>
+            <th>Domínio</th>
+            <th>Observações</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+
+    <footer class="note">
+      Dados mantidos manualmente em <code>data.js</code>. Nível A/B/C, nomes completos e domínios
+      pendentes serão preenchidos conforme a classificação avançar.
+    </footer>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
