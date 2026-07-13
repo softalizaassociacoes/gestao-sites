@@ -55,6 +55,14 @@
           <input type="checkbox" id="assoc-show-removed" />
           Mostrar excluídas
         </label>
+        <button class="btn-add" id="assoc-add-toggle" type="button">+ Nova associação</button>
+      </div>
+
+      <div class="add-form" id="assoc-add-form">
+        <input type="text" id="new-assoc-sigla" placeholder="Sigla (ex: ABC)" />
+        <input type="text" id="new-assoc-nome" placeholder="Nome completo (opcional)" />
+        <button class="btn-add-submit" id="assoc-add-submit" type="button">Adicionar</button>
+        <button class="btn-add-cancel" id="assoc-add-cancel" type="button">Cancelar</button>
       </div>
 
       <div class="table-container">
@@ -85,6 +93,18 @@
           <option value="acontecendo">Acontecendo</option>
           <option value="realizado">Realizado</option>
         </select>
+        <label class="checkbox-field">
+          <input type="checkbox" id="evento-show-removed" />
+          Mostrar excluídos
+        </label>
+        <button class="btn-add" id="evento-add-toggle" type="button">+ Novo evento</button>
+      </div>
+
+      <div class="add-form" id="evento-add-form">
+        <input type="text" id="new-evento-nome" placeholder="Nome do evento" />
+        <input type="text" id="new-evento-associacao" placeholder="Associação (opcional)" />
+        <button class="btn-add-submit" id="evento-add-submit" type="button">Adicionar</button>
+        <button class="btn-add-cancel" id="evento-add-cancel" type="button">Cancelar</button>
       </div>
 
       <div class="table-container">
@@ -96,6 +116,7 @@
               <th>Edição / Local</th>
               <th>Status</th>
               <th>Site</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody id="evento-table-body"></tbody>

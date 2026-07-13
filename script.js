@@ -63,8 +63,64 @@ function saveEventOverride(id, patch) {
 
 const EVENT_OVERRIDES = loadEventOverrides();
 
+// --- Associações/eventos criados manualmente (não vêm do CS Hub) ---
+const MANUAL_ASSOC_KEY = "gestaoSitesManualAssoc";
+const MANUAL_EVENT_KEY = "gestaoSitesManualEventos";
+
+function loadManualAssoc() {
+  try {
+    return JSON.parse(localStorage.getItem(MANUAL_ASSOC_KEY)) || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveManualAssoc(list) {
+  localStorage.setItem(MANUAL_ASSOC_KEY, JSON.stringify(list));
+}
+
+function loadManualEventos() {
+  try {
+    return JSON.parse(localStorage.getItem(MANUAL_EVENT_KEY)) || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveManualEventos(list) {
+  localStorage.setItem(MANUAL_EVENT_KEY, JSON.stringify(list));
+}
+
+function saveAssocField(sigla, patch) {
+  const assoc = ASSOCIACOES.find((a) => a.sigla === sigla);
+  if (assoc && assoc.manual) {
+    const manual = loadManualAssoc();
+    const idx = manual.findIndex((m) => m.sigla === sigla);
+    if (idx >= 0) {
+      manual[idx] = { ...manual[idx], ...patch };
+      saveManualAssoc(manual);
+    }
+  } else {
+    saveOverride(sigla, patch);
+  }
+}
+
+function saveEventoField(id, patch) {
+  const evento = EVENTOS.find((e) => e.id === id);
+  if (evento && evento.manual) {
+    const manual = loadManualEventos();
+    const idx = manual.findIndex((m) => m.id === id);
+    if (idx >= 0) {
+      manual[idx] = { ...manual[idx], ...patch };
+      saveManualEventos(manual);
+    }
+  } else {
+    saveEventOverride(id, patch);
+  }
+}
+
 function buildAssociacoes() {
-  return ASSOCIATIONS_CRM.map((a) => {
+  const fromCrm = ASSOCIATIONS_CRM.map((a) => {
     const key = norm(a.sigla);
     const vercel = VERCEL_ASSOC_N[key] || null;
     const nivel = NIVEL_OVERRIDE_N[key] || null;
@@ -83,8 +139,27 @@ function buildAssociacoes() {
       siteAtual: saved.siteAtual || defaultSiteAtual,
       link: saved.link != null ? saved.link : defaultLink,
       removed: !!saved.removed,
+      manual: false,
     };
   });
+
+  const manual = loadManualAssoc().map((m) => ({ ...m, manual: true }));
+  return [...fromCrm, ...manual];
+}
+
+function addManualAssoc(sigla, nome) {
+  const manual = loadManualAssoc();
+  const record = {
+    sigla,
+    nome: nome || null,
+    health: null,
+    siteAtual: "wordpress",
+    link: "",
+    removed: false,
+  };
+  manual.push(record);
+  saveManualAssoc(manual);
+  ASSOCIACOES.push({ ...record, manual: true });
 }
 
 const STATUS_MANUAL_OPTIONS = [
@@ -133,10 +208,34 @@ function buildEventos() {
       statusManual: saved.statusManual || "realizado",
       link: saved.link != null ? saved.link : r.site,
       removed: !!saved.removed,
+      manual: false,
     };
   });
 
-  return [...fromCrm, ...fromSheetOnly];
+  const manual = loadManualEventos().map((m) => ({ ...m, manual: true }));
+  return [...fromCrm.map((e) => ({ ...e, manual: false })), ...fromSheetOnly, ...manual];
+}
+
+function addManualEvento(nome, associacao) {
+  const id = `manual-${Date.now()}`;
+  const manual = loadManualEventos();
+  const record = {
+    id,
+    sigla: null,
+    associacao: associacao || null,
+    nome,
+    shortName: null,
+    edicao: null,
+    ano: null,
+    cidade: null,
+    estado: null,
+    statusManual: "a_acontecer",
+    link: "",
+    removed: false,
+  };
+  manual.push(record);
+  saveManualEventos(manual);
+  EVENTOS.push({ ...record, manual: true });
 }
 
 const ASSOCIACOES = buildAssociacoes();
@@ -271,11 +370,11 @@ function handleAssocEdit(ev) {
 
   if (el.classList.contains("site-select")) {
     assoc.siteAtual = el.value;
-    saveOverride(sigla, { siteAtual: el.value });
+    saveAssocField(sigla, { siteAtual: el.value });
     applyAssocFilters();
   } else if (el.classList.contains("site-link")) {
     assoc.link = el.value;
-    saveOverride(sigla, { link: el.value });
+    saveAssocField(sigla, { link: el.value });
   }
 }
 
@@ -289,10 +388,10 @@ function handleAssocClick(ev) {
   if (btn.classList.contains("btn-remove")) {
     if (!confirm(`Excluir "${sigla}" da gestão de sites? Ela pode ser restaurada depois em "Mostrar excluídas".`)) return;
     assoc.removed = true;
-    saveOverride(sigla, { removed: true });
+    saveAssocField(sigla, { removed: true });
   } else if (btn.classList.contains("btn-restore")) {
     assoc.removed = false;
-    saveOverride(sigla, { removed: false });
+    saveAssocField(sigla, { removed: false });
   }
   applyAssocFilters();
 }
@@ -301,7 +400,8 @@ function handleAssocClick(ev) {
 // Aba Eventos
 // ---------------------------------------------------------------------------
 
-function renderEventoStats(list) {
+function renderEventoStats(allList) {
+  const list = allList.filter((e) => !e.removed);
   const total = list.length;
   const aAcontecer = list.filter((e) => e.statusManual === "a_acontecer").length;
   const acontecendo = list.filter((e) => e.statusManual === "acontecendo").length;
@@ -324,19 +424,22 @@ function renderEventoStats(list) {
 function renderEventoTable(list) {
   const tbody = document.getElementById("evento-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhum evento encontrado com esses filtros.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Nenhum evento encontrado com esses filtros.</td></tr>';
     return;
   }
   tbody.innerHTML = list
     .map((e) => {
       const edicaoAno = [e.edicao, e.ano].filter(Boolean).join(" · ") || "—";
       const local = [e.cidade, e.estado].filter(Boolean).join("/");
-      return `<tr>
+      return `<tr class="${e.removed ? "row-removed" : ""}">
         <td><strong>${e.shortName || e.nome}</strong><div class="muted small">${e.nome}</div></td>
         <td class="muted">${e.associacao || e.sigla || "—"}</td>
         <td class="muted">${edicaoAno}${local ? `<div class="small">${local}</div>` : ""}</td>
         <td>${statusManualSelect(e.id, e.statusManual)}</td>
         <td>${eventoLinkInput(e.id, e.link)}</td>
+        <td>${e.removed
+          ? `<button class="btn-restore" data-id="${e.id}">Restaurar</button>`
+          : `<button class="btn-remove" data-id="${e.id}">Excluir</button>`}</td>
       </tr>`;
     })
     .join("");
@@ -345,8 +448,10 @@ function renderEventoTable(list) {
 function applyEventoFilters() {
   const q = document.getElementById("evento-search").value.trim().toLowerCase();
   const status = document.getElementById("evento-filter-status").value;
+  const showRemoved = document.getElementById("evento-show-removed").checked;
 
   const filtered = EVENTOS.filter((e) => {
+    if (!showRemoved && e.removed) return false;
     if (q && !`${e.nome} ${e.shortName || ""} ${e.associacao || ""} ${e.sigla || ""}`.toLowerCase().includes(q)) return false;
     if (status && e.statusManual !== status) return false;
     return true;
@@ -354,6 +459,24 @@ function applyEventoFilters() {
 
   renderEventoStats(filtered);
   renderEventoTable(filtered);
+}
+
+function handleEventoClick(ev) {
+  const btn = ev.target.closest("button[data-id]");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const evento = EVENTOS.find((e) => e.id === id);
+  if (!evento) return;
+
+  if (btn.classList.contains("btn-remove")) {
+    if (!confirm(`Excluir "${evento.shortName || evento.nome}" da gestão de sites? Pode ser restaurado depois em "Mostrar excluídos".`)) return;
+    evento.removed = true;
+    saveEventoField(id, { removed: true });
+  } else if (btn.classList.contains("btn-restore")) {
+    evento.removed = false;
+    saveEventoField(id, { removed: false });
+  }
+  applyEventoFilters();
 }
 
 function handleEventoEdit(ev) {
@@ -365,12 +488,77 @@ function handleEventoEdit(ev) {
 
   if (el.classList.contains("evento-status-select")) {
     evento.statusManual = el.value;
-    saveEventOverride(id, { statusManual: el.value });
+    saveEventoField(id, { statusManual: el.value });
     applyEventoFilters();
   } else if (el.classList.contains("evento-link")) {
     evento.link = el.value;
-    saveEventOverride(id, { link: el.value });
+    saveEventoField(id, { link: el.value });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Formulários de "adicionar"
+// ---------------------------------------------------------------------------
+
+function initAddForm(opts) {
+  const toggleBtn = document.getElementById(opts.toggleId);
+  const form = document.getElementById(opts.formId);
+  const cancelBtn = document.getElementById(opts.cancelId);
+  const submitBtn = document.getElementById(opts.submitId);
+
+  toggleBtn.addEventListener("click", () => {
+    form.classList.toggle("open");
+    if (form.classList.contains("open")) document.getElementById(opts.firstFieldId).focus();
+  });
+
+  cancelBtn.addEventListener("click", () => {
+    form.classList.remove("open");
+    opts.fieldIds.forEach((id) => (document.getElementById(id).value = ""));
+  });
+
+  submitBtn.addEventListener("click", () => {
+    const ok = opts.onSubmit();
+    if (ok) {
+      opts.fieldIds.forEach((id) => (document.getElementById(id).value = ""));
+      form.classList.remove("open");
+    }
+  });
+}
+
+function handleAddAssoc() {
+  const siglaInput = document.getElementById("new-assoc-sigla");
+  const nomeInput = document.getElementById("new-assoc-nome");
+  const sigla = siglaInput.value.trim();
+  const nome = nomeInput.value.trim();
+
+  if (!sigla) {
+    alert("Informe a sigla da associação.");
+    return false;
+  }
+  if (ASSOCIACOES.some((a) => norm(a.sigla) === norm(sigla))) {
+    alert(`Já existe uma associação com a sigla "${sigla}".`);
+    return false;
+  }
+
+  addManualAssoc(sigla, nome);
+  applyAssocFilters();
+  return true;
+}
+
+function handleAddEvento() {
+  const nomeInput = document.getElementById("new-evento-nome");
+  const assocInput = document.getElementById("new-evento-associacao");
+  const nome = nomeInput.value.trim();
+  const associacao = assocInput.value.trim();
+
+  if (!nome) {
+    alert("Informe o nome do evento.");
+    return false;
+  }
+
+  addManualEvento(nome, associacao);
+  applyEventoFilters();
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -398,13 +586,34 @@ function init() {
   ["assoc-search", "assoc-filter-health", "assoc-filter-site", "assoc-show-removed"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyAssocFilters);
   });
-  ["evento-search", "evento-filter-status"].forEach((id) => {
+  ["evento-search", "evento-filter-status", "evento-show-removed"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyEventoFilters);
   });
 
   document.getElementById("assoc-table-body").addEventListener("change", handleAssocEdit);
   document.getElementById("assoc-table-body").addEventListener("click", handleAssocClick);
   document.getElementById("evento-table-body").addEventListener("change", handleEventoEdit);
+  document.getElementById("evento-table-body").addEventListener("click", handleEventoClick);
+
+  initAddForm({
+    toggleId: "assoc-add-toggle",
+    formId: "assoc-add-form",
+    cancelId: "assoc-add-cancel",
+    submitId: "assoc-add-submit",
+    firstFieldId: "new-assoc-sigla",
+    fieldIds: ["new-assoc-sigla", "new-assoc-nome"],
+    onSubmit: handleAddAssoc,
+  });
+
+  initAddForm({
+    toggleId: "evento-add-toggle",
+    formId: "evento-add-form",
+    cancelId: "evento-add-cancel",
+    submitId: "evento-add-submit",
+    firstFieldId: "new-evento-nome",
+    fieldIds: ["new-evento-nome", "new-evento-associacao"],
+    onSubmit: handleAddEvento,
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);
