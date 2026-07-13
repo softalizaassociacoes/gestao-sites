@@ -330,14 +330,12 @@ function renderAssocTable(list) {
   }
   tbody.innerHTML = list
     .map(
-      (a) => `<tr class="${a.removed ? "row-removed" : ""}">
+      (a) => `<tr>
         <td><div class="name-cell"><span class="avatar">${initials(a.sigla)}</span><div><strong>${a.sigla}</strong><div class="muted small">${a.nome || "—"}</div></div></div></td>
         <td>${healthBadge(a.health)}</td>
         <td>${siteAtualSelect(a.sigla, a.siteAtual)}</td>
         <td><input class="site-link" type="text" data-sigla="${a.sigla}" value="${(a.link || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
-        <td>${a.removed
-          ? `<button class="btn-restore" data-sigla="${a.sigla}">Restaurar</button>`
-          : `<button class="btn-remove" data-sigla="${a.sigla}">Excluir</button>`}</td>
+        <td><button class="btn-remove" data-sigla="${a.sigla}">Excluir</button></td>
       </tr>`
     )
     .join("");
@@ -347,10 +345,9 @@ function applyAssocFilters() {
   const q = document.getElementById("assoc-search").value.trim().toLowerCase();
   const health = document.getElementById("assoc-filter-health").value;
   const site = document.getElementById("assoc-filter-site").value;
-  const showRemoved = document.getElementById("assoc-show-removed").checked;
 
   const filtered = ASSOCIACOES.filter((a) => {
-    if (!showRemoved && a.removed) return false;
+    if (a.removed) return false;
     if (q && !`${a.sigla} ${a.nome || ""}`.toLowerCase().includes(q)) return false;
     if (health && a.health !== health) return false;
     if (site && a.siteAtual !== site) return false;
@@ -386,12 +383,9 @@ function handleAssocClick(ev) {
   if (!assoc) return;
 
   if (btn.classList.contains("btn-remove")) {
-    if (!confirm(`Excluir "${sigla}" da gestão de sites? Ela pode ser restaurada depois em "Mostrar excluídas".`)) return;
+    if (!confirm(`Excluir "${sigla}" da gestão de sites?`)) return;
     assoc.removed = true;
     saveAssocField(sigla, { removed: true });
-  } else if (btn.classList.contains("btn-restore")) {
-    assoc.removed = false;
-    saveAssocField(sigla, { removed: false });
   }
   applyAssocFilters();
 }
@@ -431,15 +425,13 @@ function renderEventoTable(list) {
     .map((e) => {
       const edicaoAno = [e.edicao, e.ano].filter(Boolean).join(" · ") || "—";
       const local = [e.cidade, e.estado].filter(Boolean).join("/");
-      return `<tr class="${e.removed ? "row-removed" : ""}">
+      return `<tr>
         <td><strong>${e.shortName || e.nome}</strong><div class="muted small">${e.nome}</div></td>
         <td class="muted">${e.associacao || e.sigla || "—"}</td>
         <td class="muted">${edicaoAno}${local ? `<div class="small">${local}</div>` : ""}</td>
         <td>${statusManualSelect(e.id, e.statusManual)}</td>
         <td>${eventoLinkInput(e.id, e.link)}</td>
-        <td>${e.removed
-          ? `<button class="btn-restore" data-id="${e.id}">Restaurar</button>`
-          : `<button class="btn-remove" data-id="${e.id}">Excluir</button>`}</td>
+        <td><button class="btn-remove" data-id="${e.id}">Excluir</button></td>
       </tr>`;
     })
     .join("");
@@ -448,10 +440,9 @@ function renderEventoTable(list) {
 function applyEventoFilters() {
   const q = document.getElementById("evento-search").value.trim().toLowerCase();
   const status = document.getElementById("evento-filter-status").value;
-  const showRemoved = document.getElementById("evento-show-removed").checked;
 
   const filtered = EVENTOS.filter((e) => {
-    if (!showRemoved && e.removed) return false;
+    if (e.removed) return false;
     if (q && !`${e.nome} ${e.shortName || ""} ${e.associacao || ""} ${e.sigla || ""}`.toLowerCase().includes(q)) return false;
     if (status && e.statusManual !== status) return false;
     return true;
@@ -469,12 +460,9 @@ function handleEventoClick(ev) {
   if (!evento) return;
 
   if (btn.classList.contains("btn-remove")) {
-    if (!confirm(`Excluir "${evento.shortName || evento.nome}" da gestão de sites? Pode ser restaurado depois em "Mostrar excluídos".`)) return;
+    if (!confirm(`Excluir "${evento.shortName || evento.nome}" da gestão de sites?`)) return;
     evento.removed = true;
     saveEventoField(id, { removed: true });
-  } else if (btn.classList.contains("btn-restore")) {
-    evento.removed = false;
-    saveEventoField(id, { removed: false });
   }
   applyEventoFilters();
 }
@@ -583,10 +571,10 @@ function init() {
   applyAssocFilters();
   applyEventoFilters();
 
-  ["assoc-search", "assoc-filter-health", "assoc-filter-site", "assoc-show-removed"].forEach((id) => {
+  ["assoc-search", "assoc-filter-health", "assoc-filter-site"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyAssocFilters);
   });
-  ["evento-search", "evento-filter-status", "evento-show-removed"].forEach((id) => {
+  ["evento-search", "evento-filter-status"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyEventoFilters);
   });
 

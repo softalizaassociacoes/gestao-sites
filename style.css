@@ -210,18 +210,6 @@ header.top p { margin: 0; color: rgba(255, 255, 255, 0.72); font-size: 13.5px; }
 
 .toolbar input { flex: 1; min-width: 200px; }
 
-.checkbox-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-muted);
-  padding: 0 4px;
-  white-space: nowrap;
-}
-
-.checkbox-field input { width: 14px; height: 14px; }
-
 .btn-add {
   margin-left: auto;
   border: 1px solid var(--accent);
@@ -351,7 +339,7 @@ tbody tr:hover { background: var(--accent-soft); }
   background: var(--surface);
 }
 
-.btn-remove, .btn-restore {
+.btn-remove {
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: var(--radius-sm);
@@ -361,16 +349,10 @@ tbody tr:hover { background: var(--accent-soft); }
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
+  color: var(--risk);
 }
 
-.btn-remove { color: var(--risk); }
 .btn-remove:hover { background: var(--risk-soft); border-color: var(--risk); }
-.btn-restore { color: var(--ok); }
-.btn-restore:hover { background: var(--ok-soft); border-color: var(--ok); }
-
-tr.row-removed { opacity: 0.55; }
-tr.row-removed td { text-decoration: line-through; text-decoration-color: var(--text-muted); }
-tr.row-removed .site-select, tr.row-removed .site-link, tr.row-removed .badge { text-decoration: none; }
 
 .badge {
   display: inline-block;
