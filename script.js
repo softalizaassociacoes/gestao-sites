@@ -63,6 +63,7 @@ function buildAssociacoes() {
       health: a.health,
       siteAtual: saved.siteAtual || defaultSiteAtual,
       link: saved.link != null ? saved.link : defaultLink,
+      removed: !!saved.removed,
     };
   });
 }
@@ -176,7 +177,8 @@ function initials(text) {
 // Aba Associações
 // ---------------------------------------------------------------------------
 
-function renderAssocStats(list) {
+function renderAssocStats(allList) {
+  const list = allList.filter((a) => !a.removed);
   const total = list.length;
   const saudavel = list.filter((a) => a.health === "saudavel").length;
   const atencaoRisco = list.filter((a) => a.health === "atencao" || a.health === "risco").length;
@@ -212,16 +214,19 @@ function renderAssocStats(list) {
 function renderAssocTable(list) {
   const tbody = document.getElementById("assoc-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Nenhuma associação encontrada com esses filtros.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhuma associação encontrada com esses filtros.</td></tr>';
     return;
   }
   tbody.innerHTML = list
     .map(
-      (a) => `<tr>
+      (a) => `<tr class="${a.removed ? "row-removed" : ""}">
         <td><div class="name-cell"><span class="avatar">${initials(a.sigla)}</span><div><strong>${a.sigla}</strong><div class="muted small">${a.nome || "—"}</div></div></div></td>
         <td>${healthBadge(a.health)}</td>
         <td>${siteAtualSelect(a.sigla, a.siteAtual)}</td>
         <td><input class="site-link" type="text" data-sigla="${a.sigla}" value="${(a.link || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
+        <td>${a.removed
+          ? `<button class="btn-restore" data-sigla="${a.sigla}">Restaurar</button>`
+          : `<button class="btn-remove" data-sigla="${a.sigla}">Excluir</button>`}</td>
       </tr>`
     )
     .join("");
@@ -231,8 +236,10 @@ function applyAssocFilters() {
   const q = document.getElementById("assoc-search").value.trim().toLowerCase();
   const health = document.getElementById("assoc-filter-health").value;
   const site = document.getElementById("assoc-filter-site").value;
+  const showRemoved = document.getElementById("assoc-show-removed").checked;
 
   const filtered = ASSOCIACOES.filter((a) => {
+    if (!showRemoved && a.removed) return false;
     if (q && !`${a.sigla} ${a.nome || ""}`.toLowerCase().includes(q)) return false;
     if (health && a.health !== health) return false;
     if (site && a.siteAtual !== site) return false;
@@ -258,6 +265,24 @@ function handleAssocEdit(ev) {
     assoc.link = el.value;
     saveOverride(sigla, { link: el.value });
   }
+}
+
+function handleAssocClick(ev) {
+  const btn = ev.target.closest("button[data-sigla]");
+  if (!btn) return;
+  const sigla = btn.dataset.sigla;
+  const assoc = ASSOCIACOES.find((a) => a.sigla === sigla);
+  if (!assoc) return;
+
+  if (btn.classList.contains("btn-remove")) {
+    if (!confirm(`Excluir "${sigla}" da gestão de sites? Ela pode ser restaurada depois em "Mostrar excluídas".`)) return;
+    assoc.removed = true;
+    saveOverride(sigla, { removed: true });
+  } else if (btn.classList.contains("btn-restore")) {
+    assoc.removed = false;
+    saveOverride(sigla, { removed: false });
+  }
+  applyAssocFilters();
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +381,7 @@ function init() {
   applyAssocFilters();
   applyEventoFilters();
 
-  ["assoc-search", "assoc-filter-health", "assoc-filter-site"].forEach((id) => {
+  ["assoc-search", "assoc-filter-health", "assoc-filter-site", "assoc-show-removed"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyAssocFilters);
   });
   ["evento-search", "evento-filter-tipo", "evento-filter-site"].forEach((id) => {
@@ -364,6 +389,7 @@ function init() {
   });
 
   document.getElementById("assoc-table-body").addEventListener("change", handleAssocEdit);
+  document.getElementById("assoc-table-body").addEventListener("click", handleAssocClick);
 }
 
 document.addEventListener("DOMContentLoaded", init);

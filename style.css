@@ -186,6 +186,18 @@ header.top p { margin: 0; color: var(--text-muted); font-size: 13.5px; }
 
 .toolbar input { flex: 1; min-width: 200px; }
 
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.checkbox-field input { width: 14px; height: 14px; }
+
 .table-container {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -209,6 +221,27 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 680p
 .site-select { min-width: 140px; }
 .site-link { width: 100%; min-width: 220px; }
 .site-select:focus, .site-link:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.btn-remove, .btn-restore {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-remove { color: var(--risk); }
+.btn-remove:hover { background: var(--risk-soft); border-color: var(--risk); }
+.btn-restore { color: var(--ok); }
+.btn-restore:hover { background: var(--ok-soft); border-color: var(--ok); }
+
+tr.row-removed { opacity: 0.55; }
+tr.row-removed td { text-decoration: line-through; text-decoration-color: var(--text-muted); }
+tr.row-removed .site-select, tr.row-removed .site-link, tr.row-removed .badge { text-decoration: none; }
 
 th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
 
