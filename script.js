@@ -421,22 +421,22 @@ function renderEventoStats(allList) {
 function renderEventoTable(list) {
   const tbody = document.getElementById("evento-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Nenhum evento encontrado com esses filtros.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhum evento encontrado com esses filtros.</td></tr>';
     return;
   }
   tbody.innerHTML = list
-    .map((e) => {
-      const edicaoAno = [e.edicao, e.ano].filter(Boolean).join(" · ") || "—";
-      const local = [e.cidade, e.estado].filter(Boolean).join("/");
-      return `<tr>
-        <td><strong>${e.shortName || e.nome}</strong><div class="muted small">${e.nome}</div></td>
-        <td class="muted">${e.associacao || e.sigla || "—"}</td>
-        <td class="muted">${edicaoAno}${local ? `<div class="small">${local}</div>` : ""}</td>
+    .map(
+      (e) => `<tr>
+        <td><div class="name-cell-fields">
+          <input class="evento-shortname" type="text" data-id="${e.id}" value="${(e.shortName || "").replace(/"/g, "&quot;")}" placeholder="Nome curto" />
+          <input class="evento-nome" type="text" data-id="${e.id}" value="${(e.nome || "").replace(/"/g, "&quot;")}" placeholder="Nome completo" />
+        </div></td>
+        <td><input class="evento-sigla" type="text" data-id="${e.id}" value="${(e.sigla || "").replace(/"/g, "&quot;")}" placeholder="Sigla" /></td>
         <td>${statusManualSelect(e.id, e.statusManual)}</td>
         <td>${eventoLinkInput(e.id, e.link)}</td>
         <td><button class="btn-remove" data-id="${e.id}">Excluir</button></td>
-      </tr>`;
-    })
+      </tr>`
+    )
     .join("");
 }
 
@@ -484,6 +484,16 @@ function handleEventoEdit(ev) {
   } else if (el.classList.contains("evento-link")) {
     evento.link = el.value;
     saveEventoField(id, { link: el.value });
+  } else if (el.classList.contains("evento-shortname")) {
+    evento.shortName = el.value;
+    saveEventoField(id, { shortName: el.value });
+  } else if (el.classList.contains("evento-nome")) {
+    evento.nome = el.value;
+    saveEventoField(id, { nome: el.value });
+  } else if (el.classList.contains("evento-sigla")) {
+    evento.sigla = el.value;
+    saveEventoField(id, { sigla: el.value });
+    applyEventoFilters();
   }
 }
 
