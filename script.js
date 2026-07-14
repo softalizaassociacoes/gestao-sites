@@ -91,17 +91,17 @@ function saveManualEventos(list) {
   localStorage.setItem(MANUAL_EVENT_KEY, JSON.stringify(list));
 }
 
-function saveAssocField(sigla, patch) {
-  const assoc = ASSOCIACOES.find((a) => a.sigla === sigla);
+function saveAssocField(key, patch) {
+  const assoc = ASSOCIACOES.find((a) => a.key === key);
   if (assoc && assoc.manual) {
     const manual = loadManualAssoc();
-    const idx = manual.findIndex((m) => m.sigla === sigla);
+    const idx = manual.findIndex((m) => m.key === key);
     if (idx >= 0) {
       manual[idx] = { ...manual[idx], ...patch };
       saveManualAssoc(manual);
     }
   } else {
-    saveOverride(sigla, patch);
+    saveOverride(key, patch);
   }
 }
 
@@ -133,8 +133,9 @@ function buildAssociacoes() {
     const saved = OVERRIDES[a.sigla] || {};
 
     return {
-      sigla: a.sigla,
-      nome: a.nome,
+      key: a.sigla,
+      sigla: saved.sigla != null ? saved.sigla : a.sigla,
+      nome: saved.nome != null ? saved.nome : a.nome,
       health: a.health,
       siteAtual: saved.siteAtual || defaultSiteAtual,
       link: saved.link != null ? saved.link : defaultLink,
@@ -150,6 +151,7 @@ function buildAssociacoes() {
 function addManualAssoc(sigla, nome) {
   const manual = loadManualAssoc();
   const record = {
+    key: `manual-${Date.now()}`,
     sigla,
     nome: nome || null,
     health: null,
@@ -245,28 +247,17 @@ const EVENTOS = buildEventos();
 // Render helpers
 // ---------------------------------------------------------------------------
 
-function healthBadge(health) {
-  const map = {
-    saudavel: ["Saudável", "health-ok"],
-    atencao: ["Atenção", "health-warn"],
-    risco: ["Risco", "health-risk"],
-    cancelado: ["Cancelado", "health-off"],
-  };
-  const [label, cls] = map[health] || ["—", "health-off"];
-  return `<span class="badge ${cls}">${label}</span>`;
-}
-
 const SITE_ATUAL_OPTIONS = [
   { value: "wordpress", label: "WordPress" },
   { value: "personalizado", label: "Personalizado" },
   { value: "hotsite", label: "Hotsite" },
 ];
 
-function siteAtualSelect(sigla, current) {
+function siteAtualSelect(key, current) {
   const opts = SITE_ATUAL_OPTIONS.map(
     (o) => `<option value="${o.value}" ${o.value === current ? "selected" : ""}>${o.label}</option>`
   ).join("");
-  return `<select class="site-select" data-sigla="${sigla}">${opts}</select>`;
+  return `<select class="site-select" data-key="${key}">${opts}</select>`;
 }
 
 function statusManualSelect(id, current) {
@@ -325,17 +316,22 @@ function renderAssocStats(allList) {
 function renderAssocTable(list) {
   const tbody = document.getElementById("assoc-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhuma associação encontrada com esses filtros.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Nenhuma associação encontrada com esses filtros.</td></tr>';
     return;
   }
   tbody.innerHTML = list
     .map(
       (a) => `<tr>
-        <td><div class="name-cell"><span class="avatar">${initials(a.sigla)}</span><div><strong>${a.sigla}</strong><div class="muted small">${a.nome || "—"}</div></div></div></td>
-        <td>${healthBadge(a.health)}</td>
-        <td>${siteAtualSelect(a.sigla, a.siteAtual)}</td>
-        <td><input class="site-link" type="text" data-sigla="${a.sigla}" value="${(a.link || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
-        <td><button class="btn-remove" data-sigla="${a.sigla}">Excluir</button></td>
+        <td><div class="name-cell">
+          <span class="avatar">${initials(a.sigla)}</span>
+          <div class="name-cell-fields">
+            <input class="assoc-sigla" type="text" data-key="${a.key}" value="${(a.sigla || "").replace(/"/g, "&quot;")}" placeholder="Sigla" />
+            <input class="assoc-nome" type="text" data-key="${a.key}" value="${(a.nome || "").replace(/"/g, "&quot;")}" placeholder="Nome completo" />
+          </div>
+        </div></td>
+        <td>${siteAtualSelect(a.key, a.siteAtual)}</td>
+        <td><input class="site-link" type="text" data-key="${a.key}" value="${(a.link || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
+        <td><button class="btn-remove" data-key="${a.key}">Excluir</button></td>
       </tr>`
     )
     .join("");
@@ -360,32 +356,39 @@ function applyAssocFilters() {
 
 function handleAssocEdit(ev) {
   const el = ev.target;
-  const sigla = el.dataset.sigla;
-  if (!sigla) return;
-  const assoc = ASSOCIACOES.find((a) => a.sigla === sigla);
+  const key = el.dataset.key;
+  if (!key) return;
+  const assoc = ASSOCIACOES.find((a) => a.key === key);
   if (!assoc) return;
 
   if (el.classList.contains("site-select")) {
     assoc.siteAtual = el.value;
-    saveAssocField(sigla, { siteAtual: el.value });
+    saveAssocField(key, { siteAtual: el.value });
     applyAssocFilters();
   } else if (el.classList.contains("site-link")) {
     assoc.link = el.value;
-    saveAssocField(sigla, { link: el.value });
+    saveAssocField(key, { link: el.value });
+  } else if (el.classList.contains("assoc-sigla")) {
+    assoc.sigla = el.value;
+    saveAssocField(key, { sigla: el.value });
+    applyAssocFilters();
+  } else if (el.classList.contains("assoc-nome")) {
+    assoc.nome = el.value;
+    saveAssocField(key, { nome: el.value });
   }
 }
 
 function handleAssocClick(ev) {
-  const btn = ev.target.closest("button[data-sigla]");
+  const btn = ev.target.closest("button[data-key]");
   if (!btn) return;
-  const sigla = btn.dataset.sigla;
-  const assoc = ASSOCIACOES.find((a) => a.sigla === sigla);
+  const key = btn.dataset.key;
+  const assoc = ASSOCIACOES.find((a) => a.key === key);
   if (!assoc) return;
 
   if (btn.classList.contains("btn-remove")) {
-    if (!confirm(`Excluir "${sigla}" da gestão de sites?`)) return;
+    if (!confirm(`Excluir "${assoc.sigla}" da gestão de sites?`)) return;
     assoc.removed = true;
-    saveAssocField(sigla, { removed: true });
+    saveAssocField(key, { removed: true });
   }
   applyAssocFilters();
 }

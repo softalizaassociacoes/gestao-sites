@@ -301,6 +301,7 @@ tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: var(--accent-soft); }
 
 .name-cell { display: flex; align-items: center; gap: 10px; }
+.name-cell-fields { display: flex; flex-direction: column; gap: 2px; min-width: 220px; }
 
 .avatar {
   width: 32px;
@@ -316,7 +317,7 @@ tbody tr:hover { background: var(--accent-soft); }
   flex-shrink: 0;
 }
 
-.site-select, .site-link, .evento-status-select, .evento-link {
+.site-select, .site-link, .evento-status-select, .evento-link, .assoc-sigla, .assoc-nome {
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -327,16 +328,22 @@ tbody tr:hover { background: var(--accent-soft); }
   transition: background 0.15s, border-color 0.15s;
 }
 
+.assoc-sigla { font-weight: 700; padding-bottom: 2px; }
+.assoc-nome { color: var(--text-muted); font-size: 11.5px; }
+
 .site-select:hover, .evento-status-select:hover { border-color: var(--border); }
-.site-link:hover, .evento-link:hover { border-color: var(--border); background: var(--surface-2); }
+.site-link:hover, .evento-link:hover, .assoc-sigla:hover, .assoc-nome:hover { border-color: var(--border); background: var(--surface-2); }
 
 .site-select, .evento-status-select { min-width: 150px; cursor: pointer; }
 .site-link, .evento-link { width: 100%; min-width: 220px; }
+.assoc-sigla, .assoc-nome { width: 100%; padding-left: 0; padding-right: 0; }
 
-.site-select:focus, .site-link:focus, .evento-status-select:focus, .evento-link:focus {
+.site-select:focus, .site-link:focus, .evento-status-select:focus, .evento-link:focus, .assoc-sigla:focus, .assoc-nome:focus {
   outline: none;
   border-color: var(--accent);
   background: var(--surface);
+  padding-left: 9px;
+  padding-right: 9px;
 }
 
 .btn-remove {
