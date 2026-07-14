@@ -428,7 +428,6 @@ function renderEventoTable(list) {
     .map(
       (e) => `<tr>
         <td><div class="name-cell-fields">
-          <input class="evento-sigla" type="text" data-id="${e.id}" value="${(e.sigla || "").replace(/"/g, "&quot;")}" placeholder="Sigla" />
           <input class="evento-shortname" type="text" data-id="${e.id}" value="${(e.shortName || "").replace(/"/g, "&quot;")}" placeholder="Nome curto" />
           <input class="evento-nome" type="text" data-id="${e.id}" value="${(e.nome || "").replace(/"/g, "&quot;")}" placeholder="Nome completo" />
         </div></td>
@@ -490,10 +489,6 @@ function handleEventoEdit(ev) {
   } else if (el.classList.contains("evento-nome")) {
     evento.nome = el.value;
     saveEventoField(id, { nome: el.value });
-  } else if (el.classList.contains("evento-sigla")) {
-    evento.sigla = el.value;
-    saveEventoField(id, { sigla: el.value });
-    applyEventoFilters();
   }
 }
 
