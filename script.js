@@ -179,10 +179,10 @@ function buildEventos() {
 
     return {
       id: e.id,
-      sigla: e.sigla,
+      sigla: saved.sigla != null ? saved.sigla : e.sigla,
       associacao: e.associacao,
-      nome: e.nome,
-      shortName: e.shortName,
+      nome: saved.nome != null ? saved.nome : e.nome,
+      shortName: saved.shortName != null ? saved.shortName : e.shortName,
       edicao: e.edicao,
       ano: e.ano,
       cidade: e.cidade,
@@ -199,10 +199,10 @@ function buildEventos() {
     const saved = EVENT_OVERRIDES[id] || {};
     return {
       id,
-      sigla: r.sigla,
+      sigla: saved.sigla != null ? saved.sigla : r.sigla,
       associacao: null,
-      nome: r.nome,
-      shortName: null,
+      nome: saved.nome != null ? saved.nome : r.nome,
+      shortName: saved.shortName != null ? saved.shortName : null,
       edicao: null,
       ano: null,
       cidade: null,

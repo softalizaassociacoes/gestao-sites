@@ -229,6 +229,7 @@ const EVENTS_CRM = [
   { id: "a63d45c0", sigla: null, associacao: null, nome: "COBEP", shortName: "COBEP", edicao: null, ano: null, tipo: "congresso", status: "planejamento", temSite: false, siteUrl: null, cidade: null, estado: null },
   { id: "6e0763b1", sigla: null, associacao: null, nome: "RISCO", shortName: "RISCO", edicao: null, ano: null, tipo: "congresso", status: "planejamento", temSite: false, siteUrl: null, cidade: null, estado: null },
   { id: "1e2e2b92", sigla: "SBEnQ", associacao: "Sociedade Brasileira de Ensino de Química", nome: "SBEnQ - Evento", shortName: "SBEnQ", edicao: null, ano: null, tipo: "congresso", status: "planejamento", temSite: false, siteUrl: null, cidade: null, estado: null },
+  { id: "sbni-cuiaba-2026", sigla: "SBNI", associacao: "Sociedade Brasileira de Neurologia Infantil", nome: "Encontro SBNI 2026", shortName: "SBNI 2026", edicao: null, ano: 2026, tipo: "encontro", status: "inscricoes_abertas", temSite: true, siteUrl: "https://tao.iweventos.com.br/encontrosbni2026", cidade: "Cuiabá", estado: "MT" },
 ];
 
 // --- Planilha de inventário de sites (Google Sheets) ---
