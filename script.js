@@ -421,17 +421,17 @@ function renderEventoStats(allList) {
 function renderEventoTable(list) {
   const tbody = document.getElementById("evento-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhum evento encontrado com esses filtros.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Nenhum evento encontrado com esses filtros.</td></tr>';
     return;
   }
   tbody.innerHTML = list
     .map(
       (e) => `<tr>
         <td><div class="name-cell-fields">
+          <input class="evento-sigla" type="text" data-id="${e.id}" value="${(e.sigla || "").replace(/"/g, "&quot;")}" placeholder="Sigla" />
           <input class="evento-shortname" type="text" data-id="${e.id}" value="${(e.shortName || "").replace(/"/g, "&quot;")}" placeholder="Nome curto" />
           <input class="evento-nome" type="text" data-id="${e.id}" value="${(e.nome || "").replace(/"/g, "&quot;")}" placeholder="Nome completo" />
         </div></td>
-        <td><input class="evento-sigla" type="text" data-id="${e.id}" value="${(e.sigla || "").replace(/"/g, "&quot;")}" placeholder="Sigla" /></td>
         <td>${statusManualSelect(e.id, e.statusManual)}</td>
         <td>${eventoLinkInput(e.id, e.link)}</td>
         <td><button class="btn-remove" data-id="${e.id}">Excluir</button></td>

@@ -331,6 +331,7 @@ tbody tr:hover { background: var(--accent-soft); }
 
 .assoc-sigla, .evento-shortname { font-weight: 700; padding-bottom: 2px; }
 .assoc-nome, .evento-nome { color: var(--text-muted); font-size: 11.5px; }
+.evento-sigla { color: var(--text-muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; }
 
 .site-select:hover, .evento-status-select:hover { border-color: var(--border); }
 .site-link:hover, .evento-link:hover, .assoc-sigla:hover, .assoc-nome:hover,
@@ -339,7 +340,6 @@ tbody tr:hover { background: var(--accent-soft); }
 .site-select, .evento-status-select { min-width: 150px; cursor: pointer; }
 .site-link, .evento-link { width: 100%; min-width: 220px; }
 .assoc-sigla, .assoc-nome, .evento-shortname, .evento-nome, .evento-sigla { width: 100%; padding-left: 0; padding-right: 0; }
-.evento-sigla { min-width: 100px; }
 
 .site-select:focus, .site-link:focus, .evento-status-select:focus, .evento-link:focus,
 .assoc-sigla:focus, .assoc-nome:focus, .evento-shortname:focus, .evento-nome:focus, .evento-sigla:focus {
