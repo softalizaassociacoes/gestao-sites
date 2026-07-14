@@ -218,13 +218,13 @@ function buildEventos() {
   return [...fromCrm.map((e) => ({ ...e, manual: false })), ...fromSheetOnly, ...manual];
 }
 
-function addManualEvento(nome, associacao) {
+function addManualEvento(nome, sigla) {
   const id = `manual-${Date.now()}`;
   const manual = loadManualEventos();
   const record = {
     id,
-    sigla: null,
-    associacao: associacao || null,
+    sigla: sigla || null,
+    associacao: null,
     nome,
     shortName: null,
     edicao: null,
@@ -558,16 +558,16 @@ function handleAddAssoc() {
 
 function handleAddEvento() {
   const nomeInput = document.getElementById("new-evento-nome");
-  const assocInput = document.getElementById("new-evento-associacao");
+  const siglaInput = document.getElementById("new-evento-sigla");
   const nome = nomeInput.value.trim();
-  const associacao = assocInput.value.trim();
+  const sigla = siglaInput.value.trim();
 
   if (!nome) {
     alert("Informe o nome do evento.");
     return false;
   }
 
-  addManualEvento(nome, associacao);
+  addManualEvento(nome, sigla);
   applyEventoFilters();
   return true;
 }
@@ -622,7 +622,7 @@ function init() {
     cancelId: "evento-add-cancel",
     submitId: "evento-add-submit",
     firstFieldId: "new-evento-nome",
-    fieldIds: ["new-evento-nome", "new-evento-associacao"],
+    fieldIds: ["new-evento-nome", "new-evento-sigla"],
     onSubmit: handleAddEvento,
   });
 }
