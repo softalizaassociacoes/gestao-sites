@@ -526,9 +526,19 @@ function handleAddAssoc() {
     alert("Informe a sigla da associação.");
     return false;
   }
-  if (ASSOCIACOES.some((a) => norm(a.sigla) === norm(sigla))) {
-    alert(`Já existe uma associação com a sigla "${sigla}".`);
-    return false;
+
+  const existing = ASSOCIACOES.find((a) => norm(a.sigla) === norm(sigla));
+  if (existing) {
+    if (!existing.removed) {
+      alert(`Já existe uma associação com a sigla "${sigla}".`);
+      return false;
+    }
+    // Recriar uma associação excluída apenas a restaura (não duplica).
+    existing.removed = false;
+    if (nome) existing.nome = nome;
+    saveAssocField(existing.key, nome ? { removed: false, nome } : { removed: false });
+    applyAssocFilters();
+    return true;
   }
 
   addManualAssoc(sigla, nome);
