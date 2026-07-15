@@ -175,6 +175,7 @@ function buildEventos() {
     const vercel = VERCEL_EVENT[e.id] || null;
     const link = (vercel && vercel.dominio) || e.siteUrl || "";
     const defaultStatusManual = e.status === "encerrado" ? "realizado" : "a_acontecer";
+    const defaultSiteAtual = vercel ? "personalizado" : "wordpress";
     const saved = EVENT_OVERRIDES[e.id] || {};
 
     return {
@@ -188,6 +189,7 @@ function buildEventos() {
       cidade: e.cidade,
       estado: e.estado,
       statusManual: saved.statusManual || defaultStatusManual,
+      siteAtual: saved.siteAtual || defaultSiteAtual,
       link: saved.link != null ? saved.link : link,
       removed: !!saved.removed,
     };
@@ -208,6 +210,7 @@ function buildEventos() {
       cidade: null,
       estado: null,
       statusManual: saved.statusManual || "realizado",
+      siteAtual: saved.siteAtual || "wordpress",
       link: saved.link != null ? saved.link : r.site,
       removed: !!saved.removed,
       manual: false,
@@ -232,6 +235,7 @@ function addManualEvento(nome, sigla) {
     cidade: null,
     estado: null,
     statusManual: "a_acontecer",
+    siteAtual: "wordpress",
     link: "",
     removed: false,
   };
@@ -265,6 +269,13 @@ function statusManualSelect(id, current) {
     (o) => `<option value="${o.value}" ${o.value === current ? "selected" : ""}>${o.label}</option>`
   ).join("");
   return `<select class="evento-status-select" data-id="${id}">${opts}</select>`;
+}
+
+function eventoSiteAtualSelect(id, current) {
+  const opts = SITE_ATUAL_OPTIONS.map(
+    (o) => `<option value="${o.value}" ${o.value === current ? "selected" : ""}>${o.label}</option>`
+  ).join("");
+  return `<select class="evento-site-select" data-id="${id}">${opts}</select>`;
 }
 
 function eventoLinkInput(id, value) {
@@ -421,7 +432,7 @@ function renderEventoStats(allList) {
 function renderEventoTable(list) {
   const tbody = document.getElementById("evento-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Nenhum evento encontrado com esses filtros.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhum evento encontrado com esses filtros.</td></tr>';
     return;
   }
   tbody.innerHTML = list
@@ -432,6 +443,7 @@ function renderEventoTable(list) {
           <input class="evento-nome" type="text" data-id="${e.id}" value="${(e.nome || "").replace(/"/g, "&quot;")}" placeholder="Nome completo" />
         </div></td>
         <td>${statusManualSelect(e.id, e.statusManual)}</td>
+        <td>${eventoSiteAtualSelect(e.id, e.siteAtual)}</td>
         <td>${eventoLinkInput(e.id, e.link)}</td>
         <td><button class="btn-remove" data-id="${e.id}">Excluir</button></td>
       </tr>`
@@ -442,11 +454,13 @@ function renderEventoTable(list) {
 function applyEventoFilters() {
   const q = document.getElementById("evento-search").value.trim().toLowerCase();
   const status = document.getElementById("evento-filter-status").value;
+  const siteAtual = document.getElementById("evento-filter-site").value;
 
   const filtered = EVENTOS.filter((e) => {
     if (e.removed) return false;
     if (q && !`${e.nome} ${e.shortName || ""} ${e.associacao || ""} ${e.sigla || ""}`.toLowerCase().includes(q)) return false;
     if (status && e.statusManual !== status) return false;
+    if (siteAtual && e.siteAtual !== siteAtual) return false;
     return true;
   });
 
@@ -479,6 +493,10 @@ function handleEventoEdit(ev) {
   if (el.classList.contains("evento-status-select")) {
     evento.statusManual = el.value;
     saveEventoField(id, { statusManual: el.value });
+    applyEventoFilters();
+  } else if (el.classList.contains("evento-site-select")) {
+    evento.siteAtual = el.value;
+    saveEventoField(id, { siteAtual: el.value });
     applyEventoFilters();
   } else if (el.classList.contains("evento-link")) {
     evento.link = el.value;
@@ -592,7 +610,7 @@ function init() {
   ["assoc-search", "assoc-filter-health", "assoc-filter-site"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyAssocFilters);
   });
-  ["evento-search", "evento-filter-status"].forEach((id) => {
+  ["evento-search", "evento-filter-status", "evento-filter-site"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyEventoFilters);
   });
 
