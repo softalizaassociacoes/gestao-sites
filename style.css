@@ -537,8 +537,7 @@ header.top p {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  overflow: auto;
-  max-height: 68vh;
+  overflow-x: auto;
   box-shadow: var(--shadow);
   margin-bottom: 18px;
   -webkit-overflow-scrolling: touch;
@@ -691,20 +690,6 @@ tbody tr:nth-child(even):hover td { background: var(--accent-soft); }
 .small { font-size: 11.5px; }
 
 /* ============================================================ remodelação */
-
-.panel-intro {
-  margin: 0 0 18px;
-  font-size: 13px;
-  color: var(--text-muted);
-  line-height: 1.55;
-  max-width: 84ch;
-  padding: 13px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-xs);
-}
 
 .remodela-cell { text-align: center; }
 
