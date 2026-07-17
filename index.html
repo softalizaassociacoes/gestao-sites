@@ -125,11 +125,17 @@
     <!-- ==================== SITES EM REMODELAÇÃO ==================== -->
     <section id="panel-remodela" class="tab-panel">
       <p class="panel-intro">Fila priorizada de sites a remodelar. A prioridade segue o valor mensal (MRR): quanto maior, mais alta na fila.</p>
-      <section class="stats" id="remodela-stats"></section>
 
       <div class="toolbar">
         <input type="text" id="remodela-search" placeholder="Buscar por sigla ou nome..." />
-        <button class="btn-add" id="remodela-seed" type="button">+ Adicionar todas WordPress à fila</button>
+        <button class="btn-add" id="remodela-add-toggle" type="button">+ Adicionar à fila</button>
+      </div>
+
+      <div class="add-form" id="remodela-add-form">
+        <input type="text" id="new-remodela-sigla" placeholder="Sigla (ex: ABC)" />
+        <input type="text" id="new-remodela-nome" placeholder="Nome completo (opcional)" />
+        <button class="btn-add-submit" id="remodela-add-submit" type="button">Adicionar</button>
+        <button class="btn-add-cancel" id="remodela-add-cancel" type="button">Cancelar</button>
       </div>
 
       <div class="table-container">
@@ -141,6 +147,8 @@
               <th>Sigla</th>
               <th>MRR/mês</th>
               <th>Link do site</th>
+              <th>Nova versão</th>
+              <th>Link nova versão</th>
               <th>Ações</th>
             </tr>
           </thead>

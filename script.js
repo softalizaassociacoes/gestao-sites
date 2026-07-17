@@ -142,6 +142,8 @@ function buildAssociacoes() {
       link: saved.link != null ? saved.link : defaultLink,
       removed: !!saved.removed,
       remodelacao: !!saved.remodelacao,
+      novaVersao: !!saved.novaVersao,
+      novaVersaoLink: saved.novaVersaoLink != null ? saved.novaVersaoLink : "",
       manual: false,
     };
   });
@@ -162,6 +164,8 @@ function addManualAssoc(sigla, nome) {
     link: "",
     removed: false,
     remodelacao: false,
+    novaVersao: false,
+    novaVersaoLink: "",
   };
   manual.push(record);
   saveManualAssoc(manual);
@@ -545,24 +549,11 @@ function prioridadeBadge(rank) {
   return `<span class="prio-badge ${cls}">${rank}º</span>`;
 }
 
-function renderRemodelaStats(queue) {
-  const total = queue.length;
-  const mrrTotal = queue.reduce((s, a) => s + (a.mrr || 0), 0);
-  const cards = [
-    { value: total, label: "Sites na fila" },
-    { value: currency.format(mrrTotal), label: "MRR mensal na fila" },
-    { value: currency.format(mrrTotal * 12), label: "Valor anual na fila" },
-  ];
-  document.getElementById("remodela-stats").innerHTML = cards
-    .map((c) => `<div class="stat-card"><div class="value">${c.value}</div><div class="label">${c.label}</div></div>`)
-    .join("");
-}
-
 function renderRemodelaTable(ranked) {
   const tbody = document.getElementById("remodela-table-body");
   if (ranked.length === 0) {
     tbody.innerHTML =
-      '<tr class="empty-row"><td colspan="6">Nenhum site na fila. Marque associações em <strong>Remodelar</strong> na aba Associações, ou use o botão acima para adicionar todas as WordPress.</td></tr>';
+      '<tr class="empty-row"><td colspan="8">Nenhum site na fila. Marque associações em <strong>Remodelar</strong> na aba Associações, ou use <strong>+ Adicionar à fila</strong> acima.</td></tr>';
     return;
   }
   tbody.innerHTML = ranked
@@ -573,6 +564,8 @@ function renderRemodelaTable(ranked) {
         <td class="rmd-sigla">${a.sigla || "—"}</td>
         <td class="rmd-mrr">${a.mrr != null ? currency.format(a.mrr) : "—"}</td>
         <td>${a.link ? `<a class="rmd-link" href="${withProto(a.link)}" target="_blank" rel="noopener">${displayLink(a.link)}</a>` : '<span class="muted">—</span>'}</td>
+        <td class="remodela-cell"><label class="remodela-check"><input type="checkbox" class="rmd-nv-check" data-key="${a.key}" ${a.novaVersao ? "checked" : ""} /><span>Feita</span></label></td>
+        <td><input class="rmd-nv-link" type="text" data-key="${a.key}" value="${(a.novaVersaoLink || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
         <td><button class="btn-remove" data-key="${a.key}">Remover da fila</button></td>
       </tr>`
     )
@@ -589,7 +582,6 @@ function applyRemodela() {
     ? ranked.filter((a) => `${a.sigla || ""} ${a.nome || ""}`.toLowerCase().includes(q))
     : ranked;
 
-  renderRemodelaStats(queue);
   renderRemodelaTable(filtered);
 }
 
@@ -605,19 +597,51 @@ function handleRemodelaClick(ev) {
   applyAssocFilters();
 }
 
-function handleRemodelaSeed() {
-  const wp = ASSOCIACOES.filter((a) => !a.removed && a.siteAtual === "wordpress" && !a.remodelacao);
-  if (wp.length === 0) {
-    alert("Todas as associações com site WordPress já estão na fila.");
-    return;
+function handleRemodelaEdit(ev) {
+  const el = ev.target;
+  const key = el.dataset.key;
+  if (!key) return;
+  const assoc = ASSOCIACOES.find((a) => a.key === key);
+  if (!assoc) return;
+
+  if (el.classList.contains("rmd-nv-check")) {
+    assoc.novaVersao = el.checked;
+    saveAssocField(key, { novaVersao: el.checked });
+  } else if (el.classList.contains("rmd-nv-link")) {
+    assoc.novaVersaoLink = el.value;
+    saveAssocField(key, { novaVersaoLink: el.value });
   }
-  if (!confirm(`Adicionar ${wp.length} associações com site WordPress à fila de remodelação?`)) return;
-  wp.forEach((a) => {
+}
+
+function handleAddRemodela() {
+  const sigla = document.getElementById("new-remodela-sigla").value.trim();
+  const nome = document.getElementById("new-remodela-nome").value.trim();
+
+  if (!sigla) {
+    alert("Informe a sigla da associação.");
+    return false;
+  }
+
+  const existing = ASSOCIACOES.find((a) => norm(a.sigla) === norm(sigla));
+  if (existing) {
+    existing.removed = false;
+    existing.remodelacao = true;
+    const patch = { removed: false, remodelacao: true };
+    if (nome) {
+      existing.nome = nome;
+      patch.nome = nome;
+    }
+    saveAssocField(existing.key, patch);
+  } else {
+    addManualAssoc(sigla, nome);
+    const a = ASSOCIACOES[ASSOCIACOES.length - 1];
     a.remodelacao = true;
     saveAssocField(a.key, { remodelacao: true });
-  });
+  }
+
   applyRemodela();
   applyAssocFilters();
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -726,13 +750,13 @@ function init() {
     document.getElementById(id).addEventListener("input", applyEventoFilters);
   });
   document.getElementById("remodela-search").addEventListener("input", applyRemodela);
-  document.getElementById("remodela-seed").addEventListener("click", handleRemodelaSeed);
 
   document.getElementById("assoc-table-body").addEventListener("change", handleAssocEdit);
   document.getElementById("assoc-table-body").addEventListener("click", handleAssocClick);
   document.getElementById("evento-table-body").addEventListener("change", handleEventoEdit);
   document.getElementById("evento-table-body").addEventListener("click", handleEventoClick);
   document.getElementById("remodela-table-body").addEventListener("click", handleRemodelaClick);
+  document.getElementById("remodela-table-body").addEventListener("change", handleRemodelaEdit);
 
   initAddForm({
     toggleId: "assoc-add-toggle",
@@ -752,6 +776,16 @@ function init() {
     firstFieldId: "new-evento-nome",
     fieldIds: ["new-evento-nome", "new-evento-sigla"],
     onSubmit: handleAddEvento,
+  });
+
+  initAddForm({
+    toggleId: "remodela-add-toggle",
+    formId: "remodela-add-form",
+    cancelId: "remodela-add-cancel",
+    submitId: "remodela-add-submit",
+    firstFieldId: "new-remodela-sigla",
+    fieldIds: ["new-remodela-sigla", "new-remodela-nome"],
+    onSubmit: handleAddRemodela,
   });
 }
 
