@@ -137,9 +137,11 @@ function buildAssociacoes() {
       sigla: saved.sigla != null ? saved.sigla : a.sigla,
       nome: saved.nome != null ? saved.nome : a.nome,
       health: a.health,
+      mrr: a.mrr,
       siteAtual: saved.siteAtual || defaultSiteAtual,
       link: saved.link != null ? saved.link : defaultLink,
       removed: !!saved.removed,
+      remodelacao: !!saved.remodelacao,
       manual: false,
     };
   });
@@ -155,9 +157,11 @@ function addManualAssoc(sigla, nome) {
     sigla,
     nome: nome || null,
     health: null,
+    mrr: null,
     siteAtual: "wordpress",
     link: "",
     removed: false,
+    remodelacao: false,
   };
   manual.push(record);
   saveManualAssoc(manual);
@@ -327,7 +331,7 @@ function renderAssocStats(allList) {
 function renderAssocTable(list) {
   const tbody = document.getElementById("assoc-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">Nenhuma associação encontrada com esses filtros.</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhuma associação encontrada com esses filtros.</td></tr>';
     return;
   }
   tbody.innerHTML = list
@@ -342,6 +346,7 @@ function renderAssocTable(list) {
         </div></td>
         <td>${siteAtualSelect(a.key, a.siteAtual)}</td>
         <td><input class="site-link" type="text" data-key="${a.key}" value="${(a.link || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
+        <td class="remodela-cell"><label class="remodela-check"><input type="checkbox" class="assoc-remodela" data-key="${a.key}" ${a.remodelacao ? "checked" : ""} /><span>Remodelar</span></label></td>
         <td><button class="btn-remove" data-key="${a.key}">Excluir</button></td>
       </tr>`
     )
@@ -386,6 +391,10 @@ function handleAssocEdit(ev) {
   } else if (el.classList.contains("assoc-nome")) {
     assoc.nome = el.value;
     saveAssocField(key, { nome: el.value });
+  } else if (el.classList.contains("assoc-remodela")) {
+    assoc.remodelacao = el.checked;
+    saveAssocField(key, { remodelacao: el.checked });
+    applyRemodela();
   }
 }
 
@@ -511,6 +520,107 @@ function handleEventoEdit(ev) {
 }
 
 // ---------------------------------------------------------------------------
+// Aba Sites em remodelação (fila priorizada por MRR)
+// ---------------------------------------------------------------------------
+
+function withProto(link) {
+  if (!link) return "#";
+  return /^https?:\/\//i.test(link) ? link : `https://${link}`;
+}
+
+function displayLink(link) {
+  return (link || "").replace(/^https?:\/\//i, "").replace(/\/$/, "");
+}
+
+function getRemodelaQueue() {
+  return ASSOCIACOES.filter((a) => a.remodelacao && !a.removed).sort(
+    (x, y) => (y.mrr || 0) - (x.mrr || 0)
+  );
+}
+
+function prioridadeBadge(rank) {
+  let cls = "prio-low";
+  if (rank <= 3) cls = "prio-high";
+  else if (rank <= 10) cls = "prio-mid";
+  return `<span class="prio-badge ${cls}">${rank}º</span>`;
+}
+
+function renderRemodelaStats(queue) {
+  const total = queue.length;
+  const mrrTotal = queue.reduce((s, a) => s + (a.mrr || 0), 0);
+  const cards = [
+    { value: total, label: "Sites na fila" },
+    { value: currency.format(mrrTotal), label: "MRR mensal na fila" },
+    { value: currency.format(mrrTotal * 12), label: "Valor anual na fila" },
+  ];
+  document.getElementById("remodela-stats").innerHTML = cards
+    .map((c) => `<div class="stat-card"><div class="value">${c.value}</div><div class="label">${c.label}</div></div>`)
+    .join("");
+}
+
+function renderRemodelaTable(ranked) {
+  const tbody = document.getElementById("remodela-table-body");
+  if (ranked.length === 0) {
+    tbody.innerHTML =
+      '<tr class="empty-row"><td colspan="6">Nenhum site na fila. Marque associações em <strong>Remodelar</strong> na aba Associações, ou use o botão acima para adicionar todas as WordPress.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = ranked
+    .map(
+      (a) => `<tr>
+        <td>${prioridadeBadge(a._rank)}</td>
+        <td><div class="name-cell"><span class="avatar">${initials(a.sigla)}</span><div class="rmd-name">${a.nome || "—"}</div></div></td>
+        <td class="rmd-sigla">${a.sigla || "—"}</td>
+        <td class="rmd-mrr">${a.mrr != null ? currency.format(a.mrr) : "—"}</td>
+        <td>${a.link ? `<a class="rmd-link" href="${withProto(a.link)}" target="_blank" rel="noopener">${displayLink(a.link)}</a>` : '<span class="muted">—</span>'}</td>
+        <td><button class="btn-remove" data-key="${a.key}">Remover da fila</button></td>
+      </tr>`
+    )
+    .join("");
+}
+
+function applyRemodela() {
+  const searchEl = document.getElementById("remodela-search");
+  if (!searchEl) return;
+  const q = searchEl.value.trim().toLowerCase();
+  const queue = getRemodelaQueue();
+  const ranked = queue.map((a, i) => ({ ...a, _rank: i + 1 }));
+  const filtered = q
+    ? ranked.filter((a) => `${a.sigla || ""} ${a.nome || ""}`.toLowerCase().includes(q))
+    : ranked;
+
+  renderRemodelaStats(queue);
+  renderRemodelaTable(filtered);
+}
+
+function handleRemodelaClick(ev) {
+  const btn = ev.target.closest("button[data-key]");
+  if (!btn) return;
+  const key = btn.dataset.key;
+  const assoc = ASSOCIACOES.find((a) => a.key === key);
+  if (!assoc) return;
+  assoc.remodelacao = false;
+  saveAssocField(key, { remodelacao: false });
+  applyRemodela();
+  applyAssocFilters();
+}
+
+function handleRemodelaSeed() {
+  const wp = ASSOCIACOES.filter((a) => !a.removed && a.siteAtual === "wordpress" && !a.remodelacao);
+  if (wp.length === 0) {
+    alert("Todas as associações com site WordPress já estão na fila.");
+    return;
+  }
+  if (!confirm(`Adicionar ${wp.length} associações com site WordPress à fila de remodelação?`)) return;
+  wp.forEach((a) => {
+    a.remodelacao = true;
+    saveAssocField(a.key, { remodelacao: true });
+  });
+  applyRemodela();
+  applyAssocFilters();
+}
+
+// ---------------------------------------------------------------------------
 // Formulários de "adicionar"
 // ---------------------------------------------------------------------------
 
@@ -597,6 +707,7 @@ function initTabs() {
       btn.classList.add("active");
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       document.getElementById(`panel-${btn.dataset.tab}`).classList.add("active");
+      if (btn.dataset.tab === "remodela") applyRemodela();
     });
   });
 }
@@ -606,6 +717,7 @@ function init() {
 
   applyAssocFilters();
   applyEventoFilters();
+  applyRemodela();
 
   ["assoc-search", "assoc-filter-health", "assoc-filter-site"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyAssocFilters);
@@ -613,11 +725,14 @@ function init() {
   ["evento-search", "evento-filter-status", "evento-filter-site"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyEventoFilters);
   });
+  document.getElementById("remodela-search").addEventListener("input", applyRemodela);
+  document.getElementById("remodela-seed").addEventListener("click", handleRemodelaSeed);
 
   document.getElementById("assoc-table-body").addEventListener("change", handleAssocEdit);
   document.getElementById("assoc-table-body").addEventListener("click", handleAssocClick);
   document.getElementById("evento-table-body").addEventListener("change", handleEventoEdit);
   document.getElementById("evento-table-body").addEventListener("click", handleEventoClick);
+  document.getElementById("remodela-table-body").addEventListener("click", handleRemodelaClick);
 
   initAddForm({
     toggleId: "assoc-add-toggle",

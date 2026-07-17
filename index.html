@@ -27,6 +27,7 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="assoc">Associações</button>
       <button class="tab-btn" data-tab="evento">Sites de Eventos</button>
+      <button class="tab-btn" data-tab="remodela">Sites em remodelação</button>
     </div>
   </nav>
 
@@ -68,6 +69,7 @@
               <th>Associação</th>
               <th>Site atual</th>
               <th>Link do site</th>
+              <th>Remodelar</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -116,6 +118,33 @@
             </tr>
           </thead>
           <tbody id="evento-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ==================== SITES EM REMODELAÇÃO ==================== -->
+    <section id="panel-remodela" class="tab-panel">
+      <p class="panel-intro">Fila priorizada de sites a remodelar. A prioridade segue o valor mensal (MRR): quanto maior, mais alta na fila.</p>
+      <section class="stats" id="remodela-stats"></section>
+
+      <div class="toolbar">
+        <input type="text" id="remodela-search" placeholder="Buscar por sigla ou nome..." />
+        <button class="btn-add" id="remodela-seed" type="button">+ Adicionar todas WordPress à fila</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Prioridade</th>
+              <th>Associação</th>
+              <th>Sigla</th>
+              <th>MRR/mês</th>
+              <th>Link do site</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="remodela-table-body"></tbody>
         </table>
       </div>
     </section>
