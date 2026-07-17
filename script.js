@@ -558,7 +558,7 @@ function renderRemodelaTable(ranked) {
   }
   tbody.innerHTML = ranked
     .map(
-      (a) => `<tr>
+      (a) => `<tr class="${a.novaVersao ? "rmd-done" : ""}">
         <td>${prioridadeBadge(a._rank)}</td>
         <td><div class="name-cell"><span class="avatar">${initials(a.sigla)}</span><div class="rmd-name">${a.nome || "—"}</div></div></td>
         <td class="rmd-sigla">${a.sigla || "—"}</td>
@@ -566,7 +566,7 @@ function renderRemodelaTable(ranked) {
         <td>${a.link ? `<a class="rmd-link" href="${withProto(a.link)}" target="_blank" rel="noopener">${displayLink(a.link)}</a>` : '<span class="muted">—</span>'}</td>
         <td class="remodela-cell"><label class="remodela-check"><input type="checkbox" class="rmd-nv-check" data-key="${a.key}" ${a.novaVersao ? "checked" : ""} /><span>Feita</span></label></td>
         <td><input class="rmd-nv-link" type="text" data-key="${a.key}" value="${(a.novaVersaoLink || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
-        <td><button class="btn-remove" data-key="${a.key}">Remover da fila</button></td>
+        <td><button class="btn-remove" data-key="${a.key}">Remover</button></td>
       </tr>`
     )
     .join("");
@@ -576,11 +576,20 @@ function applyRemodela() {
   const searchEl = document.getElementById("remodela-search");
   if (!searchEl) return;
   const q = searchEl.value.trim().toLowerCase();
+  const nvFilter = document.getElementById("remodela-filter-nv").value;
+
   const queue = getRemodelaQueue();
+  // Prioridade (nº) fixa por MRR.
   const ranked = queue.map((a, i) => ({ ...a, _rank: i + 1 }));
-  const filtered = q
-    ? ranked.filter((a) => `${a.sigla || ""} ${a.nome || ""}`.toLowerCase().includes(q))
-    : ranked;
+  // Feitos vão para o final, mantendo a prioridade (sort estável preserva a ordem por MRR dentro de cada grupo).
+  const ordered = [...ranked].sort((a, b) => (a.novaVersao ? 1 : 0) - (b.novaVersao ? 1 : 0));
+
+  const filtered = ordered.filter((a) => {
+    if (q && !`${a.sigla || ""} ${a.nome || ""}`.toLowerCase().includes(q)) return false;
+    if (nvFilter === "feita" && !a.novaVersao) return false;
+    if (nvFilter === "pendente" && a.novaVersao) return false;
+    return true;
+  });
 
   renderRemodelaTable(filtered);
 }
@@ -749,7 +758,9 @@ function init() {
   ["evento-search", "evento-filter-status", "evento-filter-site"].forEach((id) => {
     document.getElementById(id).addEventListener("input", applyEventoFilters);
   });
-  document.getElementById("remodela-search").addEventListener("input", applyRemodela);
+  ["remodela-search", "remodela-filter-nv"].forEach((id) => {
+    document.getElementById(id).addEventListener("input", applyRemodela);
+  });
 
   document.getElementById("assoc-table-body").addEventListener("change", handleAssocEdit);
   document.getElementById("assoc-table-body").addEventListener("click", handleAssocClick);
