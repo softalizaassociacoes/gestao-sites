@@ -294,6 +294,17 @@ function initials(text) {
   return (text || "?").replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
 }
 
+function avatarHue(text) {
+  const s = text || "?";
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
+function avatar(sigla) {
+  return `<span class="avatar" style="--av:${avatarHue(sigla)}">${initials(sigla)}</span>`;
+}
+
 // ---------------------------------------------------------------------------
 // Aba Associações
 // ---------------------------------------------------------------------------
@@ -342,7 +353,7 @@ function renderAssocTable(list) {
     .map(
       (a) => `<tr>
         <td><div class="name-cell">
-          <span class="avatar">${initials(a.sigla)}</span>
+          ${avatar(a.sigla)}
           <div class="name-cell-fields">
             <input class="assoc-sigla" type="text" data-key="${a.key}" value="${(a.sigla || "").replace(/"/g, "&quot;")}" placeholder="Sigla" />
             <input class="assoc-nome" type="text" data-key="${a.key}" value="${(a.nome || "").replace(/"/g, "&quot;")}" placeholder="Nome completo" />
@@ -560,7 +571,7 @@ function renderRemodelaTable(ranked) {
     .map(
       (a) => `<tr class="${a.novaVersao ? "rmd-done" : ""}">
         <td>${prioridadeBadge(a._rank)}</td>
-        <td><div class="name-cell"><span class="avatar">${initials(a.sigla)}</span><div class="rmd-name">${a.nome || "—"}</div></div></td>
+        <td><div class="name-cell">${avatar(a.sigla)}<div class="rmd-name">${a.nome || "—"}</div></div></td>
         <td class="rmd-sigla">${a.sigla || "—"}</td>
         <td class="rmd-mrr">${a.mrr != null ? currency.format(a.mrr) : "—"}</td>
         <td>${a.link ? `<a class="rmd-link" href="${withProto(a.link)}" target="_blank" rel="noopener">${displayLink(a.link)}</a>` : '<span class="muted">—</span>'}</td>
