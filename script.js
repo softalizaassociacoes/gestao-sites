@@ -137,7 +137,7 @@ function buildAssociacoes() {
       sigla: saved.sigla != null ? saved.sigla : a.sigla,
       nome: saved.nome != null ? saved.nome : a.nome,
       health: a.health,
-      mrr: a.mrr,
+      mrr: saved.mrr != null ? saved.mrr : a.mrr,
       siteAtual: saved.siteAtual || defaultSiteAtual,
       link: saved.link != null ? saved.link : defaultLink,
       removed: !!saved.removed,
@@ -571,10 +571,10 @@ function renderRemodelaTable(ranked) {
     .map(
       (a) => `<tr class="${a.novaVersao ? "rmd-done" : ""}">
         <td>${prioridadeBadge(a._rank)}</td>
-        <td><div class="name-cell">${avatar(a.sigla)}<div class="rmd-name">${a.nome || "—"}</div></div></td>
-        <td class="rmd-sigla">${a.sigla || "—"}</td>
-        <td class="rmd-mrr">${a.mrr != null ? currency.format(a.mrr) : "—"}</td>
-        <td>${a.link ? `<a class="rmd-link" href="${withProto(a.link)}" target="_blank" rel="noopener">${displayLink(a.link)}</a>` : '<span class="muted">—</span>'}</td>
+        <td><div class="name-cell">${avatar(a.sigla)}<input class="rmd-nome" type="text" data-key="${a.key}" value="${(a.nome || "").replace(/"/g, "&quot;")}" placeholder="Nome completo" /></div></td>
+        <td><input class="rmd-sigla-inp" type="text" data-key="${a.key}" value="${(a.sigla || "").replace(/"/g, "&quot;")}" placeholder="Sigla" /></td>
+        <td><input class="rmd-mrr-inp" type="text" inputmode="numeric" data-key="${a.key}" value="${a.mrr != null ? a.mrr : ""}" placeholder="0" /></td>
+        <td><input class="rmd-site-link" type="text" data-key="${a.key}" value="${(a.link || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
         <td class="remodela-cell"><label class="remodela-check"><input type="checkbox" class="rmd-nv-check" data-key="${a.key}" ${a.novaVersao ? "checked" : ""} /><span>Feita</span></label></td>
         <td><input class="rmd-nv-link" type="text" data-key="${a.key}" value="${(a.novaVersaoLink || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
         <td><button class="btn-remove" data-key="${a.key}">Remover</button></td>
@@ -627,9 +627,30 @@ function handleRemodelaEdit(ev) {
   if (el.classList.contains("rmd-nv-check")) {
     assoc.novaVersao = el.checked;
     saveAssocField(key, { novaVersao: el.checked });
+    applyRemodela();
   } else if (el.classList.contains("rmd-nv-link")) {
     assoc.novaVersaoLink = el.value;
     saveAssocField(key, { novaVersaoLink: el.value });
+  } else if (el.classList.contains("rmd-nome")) {
+    assoc.nome = el.value;
+    saveAssocField(key, { nome: el.value });
+    applyAssocFilters();
+  } else if (el.classList.contains("rmd-sigla-inp")) {
+    assoc.sigla = el.value;
+    saveAssocField(key, { sigla: el.value });
+    applyRemodela();
+    applyAssocFilters();
+  } else if (el.classList.contains("rmd-mrr-inp")) {
+    const digits = el.value.replace(/[^\d]/g, "");
+    const val = digits ? Number(digits) : null;
+    assoc.mrr = val;
+    saveAssocField(key, { mrr: val });
+    applyRemodela();
+    applyAssocFilters();
+  } else if (el.classList.contains("rmd-site-link")) {
+    assoc.link = el.value;
+    saveAssocField(key, { link: el.value });
+    applyAssocFilters();
   }
 }
 
@@ -751,7 +772,9 @@ function initTabs() {
       btn.classList.add("active");
       document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
       document.getElementById(`panel-${btn.dataset.tab}`).classList.add("active");
-      if (btn.dataset.tab === "remodela") applyRemodela();
+      if (btn.dataset.tab === "assoc") applyAssocFilters();
+      else if (btn.dataset.tab === "evento") applyEventoFilters();
+      else if (btn.dataset.tab === "remodela") applyRemodela();
     });
   });
 }
