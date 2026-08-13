@@ -4,167 +4,258 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gestão de Sites — Softaliza</title>
+  <meta name="description" content="Painel interno de migração dos sites de associações e eventos da Softaliza." />
   <link rel="icon" type="image/svg+xml" href="logo.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <script>
+    // aplica o tema salvo antes da pintura, evitando piscada
+    try {
+      var t = localStorage.getItem("gestaoSitesTheme");
+      if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
 </head>
 <body>
-  <header class="top">
-    <div class="top-inner">
-      <div class="brand">
-        <img class="brand-mark" src="logo.svg" alt="Softaliza" />
+  <div class="app">
+    <!-- ==================================================== navegação -->
+    <aside class="rail">
+      <div class="rail-brand">
+        <img class="rail-logo" src="logo.svg" alt="" />
         <div>
-          <h1>Gestão de Sites</h1>
-          <p>Migração das associações e seus eventos para sites com identidade própria — Git + Vercel.</p>
+          <div class="rail-brand-name">Gestão de Sites</div>
+          <div class="rail-brand-sub">Softaliza</div>
         </div>
       </div>
+
+      <div class="rail-label">Painéis</div>
+      <nav class="rail-nav">
+        <button class="nav-item active" data-tab="assoc" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M10 21v-4h4v4"/></svg>
+          <span class="nav-text">Associações</span>
+          <span class="nav-count" id="count-assoc">0</span>
+        </button>
+        <button class="nav-item" data-tab="evento" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
+          <span class="nav-text">Eventos</span>
+          <span class="nav-count" id="count-evento">0</span>
+        </button>
+        <button class="nav-item" data-tab="remodela" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.9 2.9M16.2 16.2l2.9 2.9M2 12h4M18 12h4M4.9 19.1l2.9-2.9M16.2 7.8l2.9-2.9"/></svg>
+          <span class="nav-text">Remodelação</span>
+          <span class="nav-count" id="count-remodela">0</span>
+        </button>
+      </nav>
+
+      <div class="rail-foot">
+        <div class="rail-note">
+          <strong>Fontes:</strong> CS Hub + inventário de sites, em <code>data.js</code>.
+          Suas edições ficam salvas neste navegador.
+        </div>
+      </div>
+    </aside>
+
+    <!-- ==================================================== conteúdo -->
+    <div class="main">
+      <header class="topbar">
+        <img class="topbar-mobile-brand" src="logo.svg" alt="Softaliza" />
+        <div class="topbar-text">
+          <h1 class="page-title" id="page-title">Associações</h1>
+          <p class="page-sub" id="page-sub">Inventário de sites institucionais e status da migração.</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-btn" id="btn-export" type="button" title="Exportar visão atual em CSV" aria-label="Exportar CSV">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 4 5-4M4 19h16"/></svg>
+          </button>
+          <button class="icon-btn" id="btn-theme" type="button" title="Alternar tema" aria-label="Alternar tema claro/escuro">
+            <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          </button>
+          <button class="btn btn-primary" id="btn-add" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            <span class="btn-text" id="btn-add-text">Nova associação</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- ================================================ associações -->
+        <section id="panel-assoc" class="panel active">
+          <div class="metrics" id="assoc-metrics"></div>
+          <div class="comp-grid" id="assoc-composition"></div>
+
+          <div class="filters">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="assoc-search" placeholder="Buscar por sigla ou nome…" autocomplete="off" />
+              <kbd>/</kbd>
+            </div>
+            <div class="chips" id="assoc-chips-health" role="group" aria-label="Filtrar por saúde">
+              <button class="chip on" data-value="" type="button">Toda saúde</button>
+              <button class="chip" data-value="saudavel" type="button"><span class="chip-dot d-ok"></span>Saudável</button>
+              <button class="chip" data-value="atencao" type="button"><span class="chip-dot d-warn"></span>Atenção</button>
+              <button class="chip" data-value="risco" type="button"><span class="chip-dot d-risk"></span>Risco</button>
+              <button class="chip" data-value="cancelado" type="button"><span class="chip-dot d-off"></span>Cancelado</button>
+            </div>
+            <div class="chips" id="assoc-chips-site" role="group" aria-label="Filtrar por tipo de site">
+              <button class="chip on" data-value="" type="button">Todo site</button>
+              <button class="chip" data-value="wordpress" type="button">WordPress</button>
+              <button class="chip" data-value="personalizado" type="button">Personalizado</button>
+              <button class="chip" data-value="hotsite" type="button">Hotsite</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Associações</h2>
+              <span class="count" id="assoc-count"></span>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="sortable" data-sort="sigla">Associação <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="health">Saúde <span class="arrow"></span></th>
+                    <th class="sortable num" data-sort="mrr">MRR <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="siteAtual">Site atual <span class="arrow"></span></th>
+                    <th>Endereço</th>
+                    <th>Remodelar</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="assoc-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================================================== eventos -->
+        <section id="panel-evento" class="panel">
+          <div class="metrics" id="evento-metrics"></div>
+          <div class="comp-grid" id="evento-composition"></div>
+
+          <div class="filters">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="evento-search" placeholder="Buscar por evento, sigla ou associação…" autocomplete="off" />
+              <kbd>/</kbd>
+            </div>
+            <div class="chips" id="evento-chips-status" role="group" aria-label="Filtrar por status">
+              <button class="chip on" data-value="" type="button">Todo status</button>
+              <button class="chip" data-value="a_acontecer" type="button"><span class="chip-dot d-warn"></span>A acontecer</button>
+              <button class="chip" data-value="acontecendo" type="button"><span class="chip-dot d-ok"></span>Acontecendo</button>
+              <button class="chip" data-value="realizado" type="button"><span class="chip-dot d-off"></span>Realizado</button>
+            </div>
+            <div class="chips" id="evento-chips-site" role="group" aria-label="Filtrar por tipo de site">
+              <button class="chip on" data-value="" type="button">Todo site</button>
+              <button class="chip" data-value="wordpress" type="button">WordPress</button>
+              <button class="chip" data-value="personalizado" type="button">Personalizado</button>
+              <button class="chip" data-value="hotsite" type="button">Hotsite</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Sites de eventos</h2>
+              <span class="count" id="evento-count"></span>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="sortable" data-sort="nome">Evento <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="statusManual">Status <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="siteAtual">Tipo de site <span class="arrow"></span></th>
+                    <th>Endereço</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="evento-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- =============================================== remodelação -->
+        <section id="panel-remodela" class="panel">
+          <div class="metrics" id="remodela-metrics"></div>
+
+          <div class="filters">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="remodela-search" placeholder="Buscar na fila…" autocomplete="off" />
+              <kbd>/</kbd>
+            </div>
+            <div class="chips" id="remodela-chips-nv" role="group" aria-label="Filtrar por nova versão">
+              <button class="chip on" data-value="" type="button">Todas</button>
+              <button class="chip" data-value="pendente" type="button"><span class="chip-dot d-warn"></span>Pendentes</button>
+              <button class="chip" data-value="feita" type="button"><span class="chip-dot d-ok"></span>Feitas</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Fila de remodelação</h2>
+              <span class="count" id="remodela-count"></span>
+              <span class="spacer"></span>
+              <div class="progress-inline" id="remodela-progress"></div>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Prio.</th>
+                    <th>Associação</th>
+                    <th class="num">MRR</th>
+                    <th>Site atual</th>
+                    <th>Nova versão</th>
+                    <th>Endereço novo</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="remodela-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
-  </header>
-
-  <nav class="tabs-wrap">
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="assoc">Associações</button>
-      <button class="tab-btn" data-tab="evento">Sites de Eventos</button>
-      <button class="tab-btn" data-tab="remodela">Sites em remodelação</button>
-    </div>
-  </nav>
-
-  <div class="wrap">
-    <!-- ==================== ASSOCIAÇÕES ==================== -->
-    <section id="panel-assoc" class="tab-panel active">
-      <section class="stats" id="assoc-stats"></section>
-      <div class="health-bar" id="assoc-health-bar"></div>
-
-      <div class="toolbar">
-        <input type="text" id="assoc-search" placeholder="Buscar por sigla ou nome..." />
-        <select id="assoc-filter-health">
-          <option value="">Toda saúde</option>
-          <option value="saudavel">Saudável</option>
-          <option value="atencao">Atenção</option>
-          <option value="risco">Risco</option>
-          <option value="cancelado">Cancelado</option>
-        </select>
-        <select id="assoc-filter-site">
-          <option value="">Todo site atual</option>
-          <option value="wordpress">WordPress</option>
-          <option value="personalizado">Personalizado</option>
-          <option value="hotsite">Hotsite</option>
-        </select>
-        <button class="btn-add" id="assoc-add-toggle" type="button">+ Nova associação</button>
-      </div>
-
-      <div class="add-form" id="assoc-add-form">
-        <input type="text" id="new-assoc-sigla" placeholder="Sigla (ex: ABC)" />
-        <input type="text" id="new-assoc-nome" placeholder="Nome completo (opcional)" />
-        <button class="btn-add-submit" id="assoc-add-submit" type="button">Adicionar</button>
-        <button class="btn-add-cancel" id="assoc-add-cancel" type="button">Cancelar</button>
-      </div>
-
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Associação</th>
-              <th>Site atual</th>
-              <th>Link do site</th>
-              <th>Remodelar</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody id="assoc-table-body"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- ==================== EVENTOS ==================== -->
-    <section id="panel-evento" class="tab-panel">
-      <section class="stats" id="evento-stats"></section>
-
-      <div class="toolbar">
-        <input type="text" id="evento-search" placeholder="Buscar por nome, sigla ou associação..." />
-        <select id="evento-filter-status">
-          <option value="">Todo status</option>
-          <option value="a_acontecer">A acontecer</option>
-          <option value="acontecendo">Acontecendo</option>
-          <option value="realizado">Realizado</option>
-        </select>
-        <select id="evento-filter-site">
-          <option value="">Todo tipo de site</option>
-          <option value="wordpress">WordPress</option>
-          <option value="personalizado">Personalizado</option>
-          <option value="hotsite">Hotsite</option>
-        </select>
-        <button class="btn-add" id="evento-add-toggle" type="button">+ Novo evento</button>
-      </div>
-
-      <div class="add-form" id="evento-add-form">
-        <input type="text" id="new-evento-nome" placeholder="Nome do evento" />
-        <input type="text" id="new-evento-sigla" placeholder="Sigla (opcional)" />
-        <button class="btn-add-submit" id="evento-add-submit" type="button">Adicionar</button>
-        <button class="btn-add-cancel" id="evento-add-cancel" type="button">Cancelar</button>
-      </div>
-
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Evento</th>
-              <th>Status</th>
-              <th>Tipo de site</th>
-              <th>Site</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody id="evento-table-body"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- ==================== SITES EM REMODELAÇÃO ==================== -->
-    <section id="panel-remodela" class="tab-panel">
-      <div class="toolbar">
-        <input type="text" id="remodela-search" placeholder="Buscar por sigla ou nome..." />
-        <select id="remodela-filter-nv">
-          <option value="">Todas</option>
-          <option value="pendente">Nova versão pendente</option>
-          <option value="feita">Nova versão feita</option>
-        </select>
-        <button class="btn-add" id="remodela-add-toggle" type="button">+ Adicionar à fila</button>
-      </div>
-
-      <div class="add-form" id="remodela-add-form">
-        <input type="text" id="new-remodela-sigla" placeholder="Sigla (ex: ABC)" />
-        <input type="text" id="new-remodela-nome" placeholder="Nome completo (opcional)" />
-        <button class="btn-add-submit" id="remodela-add-submit" type="button">Adicionar</button>
-        <button class="btn-add-cancel" id="remodela-add-cancel" type="button">Cancelar</button>
-      </div>
-
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Prioridade</th>
-              <th>Associação</th>
-              <th>Sigla</th>
-              <th>MRR/mês</th>
-              <th>Link do site</th>
-              <th>Nova versão</th>
-              <th>Link nova versão</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody id="remodela-table-body"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <footer class="note">
-      Dados: CS Hub (associações e eventos) + planilha de inventário de sites. Mantidos em <code>data.js</code>;
-      edições manuais salvas no navegador.
-    </footer>
   </div>
+
+  <!-- ======================================================== diálogos -->
+  <dialog class="modal" id="dlg-add">
+    <div class="modal-head">
+      <div>
+        <h2 id="dlg-add-title">Nova associação</h2>
+        <p id="dlg-add-sub">Entra na lista e fica salva neste navegador.</p>
+      </div>
+      <button class="icon-btn" type="button" data-close aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form class="modal-body" id="dlg-add-body"></form>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" type="button" data-close>Cancelar</button>
+      <button class="btn btn-primary" type="button" id="dlg-add-submit">Adicionar</button>
+    </div>
+  </dialog>
+
+  <dialog class="modal" id="dlg-confirm">
+    <div class="modal-head">
+      <div>
+        <h2 id="dlg-confirm-title">Confirmar</h2>
+        <p id="dlg-confirm-sub"></p>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" type="button" data-close>Cancelar</button>
+      <button class="btn btn-danger" type="button" id="dlg-confirm-ok">Excluir</button>
+    </div>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="data.js"></script>
   <script src="script.js"></script>

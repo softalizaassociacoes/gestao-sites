@@ -1,5 +1,5 @@
 // ============================================================================
-// Merge das fontes brutas (data.js) + renderização das duas abas.
+// Gestão de Sites — merge das fontes brutas (data.js) + interface do painel.
 // ============================================================================
 
 function norm(s) {
@@ -25,7 +25,10 @@ SITE_INVENTORY.forEach((row) => {
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-// --- Edições manuais persistidas no navegador (localStorage) ---
+// ---------------------------------------------------------------------------
+// Persistência (localStorage)
+// ---------------------------------------------------------------------------
+
 const OVERRIDES_KEY = "gestaoSitesOverrides";
 
 function loadOverrides() {
@@ -44,7 +47,6 @@ function saveOverride(sigla, patch) {
 
 const OVERRIDES = loadOverrides();
 
-// --- Edições manuais de eventos (chave própria, indexada por id do evento) ---
 const EVENT_OVERRIDES_KEY = "gestaoSitesEventOverrides";
 
 function loadEventOverrides() {
@@ -63,7 +65,6 @@ function saveEventOverride(id, patch) {
 
 const EVENT_OVERRIDES = loadEventOverrides();
 
-// --- Associações/eventos criados manualmente (não vêm do CS Hub) ---
 const MANUAL_ASSOC_KEY = "gestaoSitesManualAssoc";
 const MANUAL_EVENT_KEY = "gestaoSitesManualEventos";
 
@@ -118,6 +119,10 @@ function saveEventoField(id, patch) {
     saveEventOverride(id, patch);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Modelo
+// ---------------------------------------------------------------------------
 
 function buildAssociacoes() {
   const fromCrm = ASSOCIATIONS_CRM.map((a) => {
@@ -176,6 +181,12 @@ const STATUS_MANUAL_OPTIONS = [
   { value: "a_acontecer", label: "A acontecer" },
   { value: "acontecendo", label: "Acontecendo" },
   { value: "realizado", label: "Realizado" },
+];
+
+const SITE_ATUAL_OPTIONS = [
+  { value: "wordpress", label: "WordPress" },
+  { value: "personalizado", label: "Personalizado" },
+  { value: "hotsite", label: "Hotsite" },
 ];
 
 function buildEventos() {
@@ -256,133 +267,472 @@ const ASSOCIACOES = buildAssociacoes();
 const EVENTOS = buildEventos();
 
 // ---------------------------------------------------------------------------
-// Render helpers
+// Estado da interface
 // ---------------------------------------------------------------------------
 
-const SITE_ATUAL_OPTIONS = [
-  { value: "wordpress", label: "WordPress" },
-  { value: "personalizado", label: "Personalizado" },
-  { value: "hotsite", label: "Hotsite" },
-];
+const TAB_KEY = "gestaoSitesTab";
+const THEME_KEY = "gestaoSitesTheme";
 
-function siteAtualSelect(key, current) {
-  const opts = SITE_ATUAL_OPTIONS.map(
-    (o) => `<option value="${o.value}" ${o.value === current ? "selected" : ""}>${o.label}</option>`
-  ).join("");
-  return `<select class="site-select" data-key="${key}">${opts}</select>`;
+const STATE = {
+  tab: "assoc",
+  assoc: { q: "", health: "", site: "", sort: { col: "sigla", dir: "asc" } },
+  evento: { q: "", status: "", site: "", sort: { col: "nome", dir: "asc" } },
+  remodela: { q: "", nv: "" },
+};
+
+// última lista renderizada de cada aba — usada na exportação CSV
+const VIEW = { assoc: [], evento: [], remodela: [] };
+
+const PAGES = {
+  assoc: {
+    title: "Associações",
+    sub: "Inventário dos sites institucionais e o estágio de cada migração.",
+    add: "Nova associação",
+  },
+  evento: {
+    title: "Sites de eventos",
+    sub: "Congressos e eventos, com site próprio ou ainda no WordPress padrão.",
+    add: "Novo evento",
+  },
+  remodela: {
+    title: "Fila de remodelação",
+    sub: "Ordenada por MRR — quem paga mais entra primeiro na régua.",
+    add: "Adicionar à fila",
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Utilidades de apresentação
+// ---------------------------------------------------------------------------
+
+function esc(v) {
+  return (v == null ? "" : String(v))
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-function statusManualSelect(id, current) {
-  const opts = STATUS_MANUAL_OPTIONS.map(
-    (o) => `<option value="${o.value}" ${o.value === current ? "selected" : ""}>${o.label}</option>`
-  ).join("");
-  return `<select class="evento-status-select" data-id="${id}">${opts}</select>`;
+function withProto(link) {
+  if (!link) return "";
+  return /^https?:\/\//i.test(link) ? link : `https://${link}`;
 }
 
-function eventoSiteAtualSelect(id, current) {
-  const opts = SITE_ATUAL_OPTIONS.map(
-    (o) => `<option value="${o.value}" ${o.value === current ? "selected" : ""}>${o.label}</option>`
-  ).join("");
-  return `<select class="evento-site-select" data-id="${id}">${opts}</select>`;
+function displayLink(link) {
+  return (link || "").replace(/^https?:\/\//i, "").replace(/\/$/, "");
 }
 
-function eventoLinkInput(id, value) {
-  return `<input class="evento-link" type="text" data-id="${id}" value="${(value || "").replace(/"/g, "&quot;")}" placeholder="https://..." />`;
+const HEALTH_META = {
+  saudavel: { label: "Saudável", cls: "b-ok" },
+  atencao: { label: "Atenção", cls: "b-warn" },
+  risco: { label: "Risco", cls: "b-risk" },
+  cancelado: { label: "Cancelado", cls: "b-off" },
+};
+
+const HEALTH_ORDER = { risco: 0, atencao: 1, saudavel: 2, cancelado: 3 };
+const STATUS_ORDER = { acontecendo: 0, a_acontecer: 1, realizado: 2 };
+
+function healthBadge(health) {
+  const meta = HEALTH_META[health];
+  if (!meta) return '<span class="badge b-none">Sem dado</span>';
+  return `<span class="badge ${meta.cls}"><i></i>${meta.label}</span>`;
 }
 
-function initials(text) {
-  return (text || "?").replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
+function labelOf(options, value) {
+  const found = options.find((o) => o.value === value);
+  return found ? found.label : value || "—";
 }
+
+const ICON = {
+  open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+  inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h5l2 3h4l2-3h5"/><path d="M5 5h14l2 7v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6Z"/></svg>',
+};
+
+const AV_HUES = [258, 224, 196, 162, 130, 42, 16, 338];
 
 function avatarHue(text) {
   const s = text || "?";
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h % 360;
+  return AV_HUES[h % AV_HUES.length];
+}
+
+function initials(text) {
+  return (text || "?").replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?";
 }
 
 function avatar(sigla) {
-  return `<span class="avatar" style="--av:${avatarHue(sigla)}">${initials(sigla)}</span>`;
+  return `<span class="avatar" style="--av:${avatarHue(sigla)}" aria-hidden="true">${esc(initials(sigla))}</span>`;
+}
+
+function selectField(cls, dataAttr, value, options) {
+  const opts = options
+    .map((o) => `<option value="${o.value}" ${o.value === value ? "selected" : ""}>${o.label}</option>`)
+    .join("");
+  return `<select class="f ${cls}" ${dataAttr}>${opts}</select>`;
+}
+
+function linkCell(cls, dataAttr, value) {
+  const has = !!(value || "").trim();
+  return `<div class="linkcell">
+    <input class="f f-mono ${cls}" type="text" ${dataAttr} value="${esc(value)}" placeholder="https://…" spellcheck="false" />
+    <button class="mini" type="button" data-act="open" ${dataAttr} ${has ? "" : "disabled"} title="Abrir site" aria-label="Abrir site">${ICON.open}</button>
+    <button class="mini" type="button" data-act="copy" ${dataAttr} ${has ? "" : "disabled"} title="Copiar endereço" aria-label="Copiar endereço">${ICON.copy}</button>
+  </div>`;
+}
+
+function switchField(cls, dataAttr, checked, label) {
+  return `<label class="switch">
+    <input type="checkbox" class="${cls}" ${dataAttr} ${checked ? "checked" : ""} />
+    <span class="track"></span>
+    ${label ? `<span class="switch-label">${label}</span>` : ""}
+  </label>`;
+}
+
+function emptyRow(cols, title, msg) {
+  return `<tr class="empty-row"><td colspan="${cols}">
+    <div class="empty">
+      <div class="empty-icon">${ICON.inbox}</div>
+      <h3>${title}</h3>
+      <p>${msg}</p>
+    </div>
+  </td></tr>`;
+}
+
+function metricsHtml(items) {
+  return items
+    .map(
+      (m) => `<div class="metric">
+        <div class="metric-top">${m.dot ? `<span class="metric-dot ${m.dot}"></span>` : ""}${m.label}</div>
+        <div class="metric-value${m.money ? " is-money" : ""}">${m.value}</div>
+        ${m.note ? `<div class="metric-note">${m.note}</div>` : ""}
+      </div>`
+    )
+    .join("");
+}
+
+function compositionHtml(title, segs) {
+  const total = segs.reduce((s, x) => s + x.count, 0);
+  const base = total || 1;
+  const bar = segs
+    .filter((s) => s.count > 0)
+    .map((s) => `<div class="comp-seg ${s.cls}" style="flex:${s.count}" title="${s.label}: ${s.count}"></div>`)
+    .join("");
+  const legend = segs
+    .map(
+      (s) =>
+        `<span class="comp-key"><i class="${s.cls}"></i>${s.label} <b>${s.count}</b><span class="muted">${Math.round(
+          (s.count / base) * 100
+        )}%</span></span>`
+    )
+    .join("");
+  return `<div class="composition">
+    <div class="comp-head"><span class="comp-title">${title}</span><span class="comp-total">${total}</span></div>
+    <div class="comp-bar">${bar}</div>
+    <div class="comp-legend">${legend}</div>
+  </div>`;
+}
+
+function pct(part, total) {
+  if (!total) return 0;
+  return Math.round((part / total) * 100);
 }
 
 // ---------------------------------------------------------------------------
-// Aba Associações
+// Toasts e diálogos
 // ---------------------------------------------------------------------------
 
-function renderAssocStats(allList) {
-  const list = allList.filter((a) => !a.removed);
+function toast(message, kind) {
+  const host = document.getElementById("toasts");
+  const el = document.createElement("div");
+  el.className = `toast${kind ? ` t-${kind}` : ""}`;
+  el.innerHTML = `${kind === "warn" ? ICON.alert : kind === "info" ? ICON.info : ICON.check}<span>${esc(message)}</span>`;
+  host.appendChild(el);
+  setTimeout(() => {
+    el.classList.add("out");
+    setTimeout(() => el.remove(), 220);
+  }, 2600);
+}
+
+let savedTimer = null;
+function toastSaved() {
+  clearTimeout(savedTimer);
+  savedTimer = setTimeout(() => toast("Alterações salvas"), 500);
+}
+
+function confirmDialog(title, message, okLabel) {
+  const dlg = document.getElementById("dlg-confirm");
+  document.getElementById("dlg-confirm-title").textContent = title;
+  document.getElementById("dlg-confirm-sub").textContent = message;
+  const ok = document.getElementById("dlg-confirm-ok");
+  ok.textContent = okLabel || "Excluir";
+
+  return new Promise((resolve) => {
+    function done(value) {
+      ok.removeEventListener("click", onOk);
+      dlg.removeEventListener("close", onClose);
+      resolve(value);
+      if (dlg.open) dlg.close();
+    }
+    function onOk() {
+      done(true);
+    }
+    function onClose() {
+      done(false);
+    }
+    ok.addEventListener("click", onOk);
+    dlg.addEventListener("close", onClose);
+    dlg.showModal();
+  });
+}
+
+const ADD_FORMS = {
+  assoc: {
+    title: "Nova associação",
+    sub: "Entra no inventário e fica salva neste navegador.",
+    fields: [
+      { name: "sigla", label: "Sigla", ph: "ex.: ABC", required: true },
+      { name: "nome", label: "Nome completo", ph: "Opcional", hint: "Pode preencher depois direto na tabela." },
+    ],
+    submit: (v) => {
+      const existing = ASSOCIACOES.find((a) => norm(a.sigla) === norm(v.sigla));
+      if (existing && !existing.removed) return { error: `Já existe uma associação com a sigla "${v.sigla}".` };
+      if (existing) {
+        existing.removed = false;
+        if (v.nome) existing.nome = v.nome;
+        saveAssocField(existing.key, v.nome ? { removed: false, nome: v.nome } : { removed: false });
+      } else {
+        addManualAssoc(v.sigla, v.nome);
+      }
+      renderAssoc();
+      return { message: `"${v.sigla}" adicionada.` };
+    },
+  },
+  evento: {
+    title: "Novo evento",
+    sub: "Para eventos que ainda não vieram do CS Hub.",
+    fields: [
+      { name: "nome", label: "Nome do evento", ph: "ex.: Congresso Brasileiro de…", required: true },
+      { name: "sigla", label: "Sigla", ph: "Opcional" },
+    ],
+    submit: (v) => {
+      addManualEvento(v.nome, v.sigla);
+      renderEvento();
+      return { message: "Evento adicionado." };
+    },
+  },
+  remodela: {
+    title: "Adicionar à fila",
+    sub: "Se a sigla já existir no inventário, ela é reaproveitada.",
+    fields: [
+      { name: "sigla", label: "Sigla", ph: "ex.: ABC", required: true },
+      { name: "nome", label: "Nome completo", ph: "Opcional" },
+    ],
+    submit: (v) => {
+      const existing = ASSOCIACOES.find((a) => norm(a.sigla) === norm(v.sigla));
+      if (existing) {
+        existing.removed = false;
+        existing.remodelacao = true;
+        const patch = { removed: false, remodelacao: true };
+        if (v.nome) {
+          existing.nome = v.nome;
+          patch.nome = v.nome;
+        }
+        saveAssocField(existing.key, patch);
+      } else {
+        addManualAssoc(v.sigla, v.nome);
+        const a = ASSOCIACOES[ASSOCIACOES.length - 1];
+        a.remodelacao = true;
+        saveAssocField(a.key, { remodelacao: true });
+      }
+      renderRemodela();
+      renderAssoc();
+      return { message: `"${v.sigla}" entrou na fila.` };
+    },
+  },
+};
+
+function openAddDialog() {
+  const cfg = ADD_FORMS[STATE.tab];
+  const dlg = document.getElementById("dlg-add");
+  const body = document.getElementById("dlg-add-body");
+
+  document.getElementById("dlg-add-title").textContent = cfg.title;
+  document.getElementById("dlg-add-sub").textContent = cfg.sub;
+  body.innerHTML =
+    cfg.fields
+      .map(
+        (f) => `<div class="field">
+          <label for="add-${f.name}">${f.label}</label>
+          <input type="text" id="add-${f.name}" name="${f.name}" placeholder="${esc(f.ph || "")}" autocomplete="off" />
+          ${f.hint ? `<div class="hint">${f.hint}</div>` : ""}
+        </div>`
+      )
+      .join("") + '<div class="modal-error" id="dlg-add-error"></div>';
+
+  dlg.showModal();
+  const first = body.querySelector("input");
+  if (first) first.focus();
+}
+
+function submitAddDialog() {
+  const cfg = ADD_FORMS[STATE.tab];
+  const dlg = document.getElementById("dlg-add");
+  const errorBox = document.getElementById("dlg-add-error");
+  const values = {};
+  cfg.fields.forEach((f) => {
+    values[f.name] = (document.getElementById(`add-${f.name}`).value || "").trim();
+  });
+
+  const missing = cfg.fields.find((f) => f.required && !values[f.name]);
+  if (missing) {
+    errorBox.textContent = `Preencha o campo "${missing.label}".`;
+    errorBox.classList.add("on");
+    document.getElementById(`add-${missing.name}`).focus();
+    return;
+  }
+
+  const result = cfg.submit(values) || {};
+  if (result.error) {
+    errorBox.textContent = result.error;
+    errorBox.classList.add("on");
+    return;
+  }
+  errorBox.classList.remove("on");
+  dlg.close();
+  renderNavCounts();
+  toast(result.message || "Adicionado.");
+}
+
+// ---------------------------------------------------------------------------
+// Aba: Associações
+// ---------------------------------------------------------------------------
+
+function sortList(list, sort, type) {
+  const dir = sort.dir === "desc" ? -1 : 1;
+  const col = sort.col;
+  return [...list].sort((a, b) => {
+    let x;
+    let y;
+    if (col === "mrr") {
+      x = a.mrr == null ? -1 : a.mrr;
+      y = b.mrr == null ? -1 : b.mrr;
+    } else if (col === "health") {
+      x = HEALTH_ORDER[a.health] == null ? 9 : HEALTH_ORDER[a.health];
+      y = HEALTH_ORDER[b.health] == null ? 9 : HEALTH_ORDER[b.health];
+    } else if (col === "statusManual") {
+      x = STATUS_ORDER[a.statusManual] == null ? 9 : STATUS_ORDER[a.statusManual];
+      y = STATUS_ORDER[b.statusManual] == null ? 9 : STATUS_ORDER[b.statusManual];
+    } else if (col === "nome" && type === "evento") {
+      x = (a.shortName || a.nome || "").toLowerCase();
+      y = (b.shortName || b.nome || "").toLowerCase();
+    } else {
+      x = (a[col] || "").toString().toLowerCase();
+      y = (b[col] || "").toString().toLowerCase();
+    }
+    if (x < y) return -1 * dir;
+    if (x > y) return 1 * dir;
+    return 0;
+  });
+}
+
+function renderAssocMetrics(list) {
   const total = list.length;
   const saudavel = list.filter((a) => a.health === "saudavel").length;
-  const atencaoRisco = list.filter((a) => a.health === "atencao" || a.health === "risco").length;
+  const atencao = list.filter((a) => a.health === "atencao").length;
+  const risco = list.filter((a) => a.health === "risco").length;
   const wordpress = list.filter((a) => a.siteAtual === "wordpress").length;
   const personalizado = list.filter((a) => a.siteAtual === "personalizado").length;
   const hotsite = list.filter((a) => a.siteAtual === "hotsite").length;
-
-  const cards = [
-    { value: total, label: "Associações" },
-    { value: saudavel, label: "Saudáveis" },
-    { value: atencaoRisco, label: "Atenção / risco" },
-    { value: wordpress, label: "WordPress" },
-    { value: personalizado, label: "Personalizado" },
-    { value: hotsite, label: "Hotsite" },
-  ];
-
-  document.getElementById("assoc-stats").innerHTML = cards
-    .map((c) => `<div class="stat-card"><div class="value">${c.value}</div><div class="label">${c.label}</div></div>`)
-    .join("");
-
   const cancelado = list.filter((a) => a.health === "cancelado").length;
-  const healthBar = [
-    { key: "saudavel", cls: "bar-ok", count: saudavel },
-    { key: "atencao", cls: "bar-warn", count: list.filter((a) => a.health === "atencao").length },
-    { key: "risco", cls: "bar-risk", count: list.filter((a) => a.health === "risco").length },
-    { key: "cancelado", cls: "bar-off", count: cancelado },
-  ];
-  document.getElementById("assoc-health-bar").innerHTML = healthBar
-    .map((seg) => `<div class="bar-seg ${seg.cls}" style="flex:${Math.max(seg.count, 0.0001)}" title="${seg.key}: ${seg.count}"></div>`)
-    .join("");
+  const semDado = total - saudavel - atencao - risco - cancelado;
+  const migrados = personalizado + hotsite;
+  const mrr = list.reduce((s, a) => s + (a.mrr || 0), 0);
+  const naFila = list.filter((a) => a.remodelacao).length;
+
+  document.getElementById("assoc-metrics").innerHTML = metricsHtml([
+    { label: "Associações", value: total, note: `${semDado} sem dado de saúde` },
+    { label: "MRR somado", value: currency.format(mrr), money: true, note: "Receita recorrente do recorte" },
+    { label: "Fora do WordPress", value: migrados, dot: "d-accent", note: `${pct(migrados, total)}% já migrado` },
+    { label: "Na fila", value: naFila, dot: "d-warn", note: "Marcadas para remodelar" },
+  ]);
+
+  document.getElementById("assoc-composition").innerHTML =
+    compositionHtml("Saúde da carteira", [
+      { cls: "s-ok", label: "Saudável", count: saudavel },
+      { cls: "s-warn", label: "Atenção", count: atencao },
+      { cls: "s-risk", label: "Risco", count: risco },
+      { cls: "s-off", label: "Cancelado", count: cancelado },
+    ]) +
+    compositionHtml("Tipo de site", [
+      { cls: "s-off", label: "WordPress", count: wordpress },
+      { cls: "s-accent", label: "Personalizado", count: personalizado },
+      { cls: "s-ok", label: "Hotsite", count: hotsite },
+    ]);
 }
 
 function renderAssocTable(list) {
   const tbody = document.getElementById("assoc-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhuma associação encontrada com esses filtros.</td></tr>';
+    tbody.innerHTML = emptyRow(
+      7,
+      "Nada por aqui",
+      "Nenhuma associação bate com esses filtros. Limpe a busca ou escolha outro recorte."
+    );
     return;
   }
+
   tbody.innerHTML = list
-    .map(
-      (a) => `<tr>
-        <td><div class="name-cell">
-          ${avatar(a.sigla)}
-          <div class="name-cell-fields">
-            <input class="assoc-sigla" type="text" data-key="${a.key}" value="${(a.sigla || "").replace(/"/g, "&quot;")}" placeholder="Sigla" />
-            <input class="assoc-nome" type="text" data-key="${a.key}" value="${(a.nome || "").replace(/"/g, "&quot;")}" placeholder="Nome completo" />
+    .map((a) => {
+      const k = `data-key="${esc(a.key)}"`;
+      return `<tr>
+        <td class="ident-td" data-l="Associação">
+          <div class="ident">
+            ${avatar(a.sigla)}
+            <div class="ident-fields">
+              <input class="f f-strong assoc-sigla" type="text" ${k} value="${esc(a.sigla)}" placeholder="Sigla" />
+              <input class="f f-sub assoc-nome" type="text" ${k} value="${esc(a.nome)}" placeholder="Nome completo" />
+            </div>
           </div>
-        </div></td>
-        <td>${siteAtualSelect(a.key, a.siteAtual)}</td>
-        <td><input class="site-link" type="text" data-key="${a.key}" value="${(a.link || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
-        <td class="remodela-cell"><label class="remodela-check"><input type="checkbox" class="assoc-remodela" data-key="${a.key}" ${a.remodelacao ? "checked" : ""} /><span>Remodelar</span></label></td>
-        <td><button class="btn-remove" data-key="${a.key}">Excluir</button></td>
-      </tr>`
-    )
+        </td>
+        <td data-l="Saúde">${healthBadge(a.health)}</td>
+        <td class="num" data-l="MRR">${a.mrr != null ? currency.format(a.mrr) : '<span class="muted">—</span>'}</td>
+        <td data-l="Site atual">${selectField("site-select", k, a.siteAtual, SITE_ATUAL_OPTIONS)}</td>
+        <td data-l="Endereço">${linkCell("site-link", k, a.link)}</td>
+        <td class="center" data-l="Remodelar">${switchField("assoc-remodela", k, a.remodelacao, "")}</td>
+        <td class="actions" data-l="">
+          <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
+        </td>
+      </tr>`;
+    })
     .join("");
 }
 
-function applyAssocFilters() {
-  const q = document.getElementById("assoc-search").value.trim().toLowerCase();
-  const health = document.getElementById("assoc-filter-health").value;
-  const site = document.getElementById("assoc-filter-site").value;
-
+function renderAssoc() {
+  const s = STATE.assoc;
   const filtered = ASSOCIACOES.filter((a) => {
     if (a.removed) return false;
-    if (q && !`${a.sigla} ${a.nome || ""}`.toLowerCase().includes(q)) return false;
-    if (health && a.health !== health) return false;
-    if (site && a.siteAtual !== site) return false;
+    if (s.q && !`${a.sigla} ${a.nome || ""}`.toLowerCase().includes(s.q)) return false;
+    if (s.health && a.health !== s.health) return false;
+    if (s.site && a.siteAtual !== s.site) return false;
     return true;
   });
 
-  renderAssocStats(filtered);
-  renderAssocTable(filtered);
+  const sorted = sortList(filtered, s.sort, "assoc");
+  VIEW.assoc = sorted;
+
+  renderAssocMetrics(sorted);
+  renderAssocTable(sorted);
+
+  const totalAtivas = ASSOCIACOES.filter((a) => !a.removed).length;
+  document.getElementById("assoc-count").textContent =
+    sorted.length === totalAtivas ? `${totalAtivas} no total` : `${sorted.length} de ${totalAtivas}`;
+  renderNavCounts();
 }
 
 function handleAssocEdit(ev) {
@@ -395,116 +745,139 @@ function handleAssocEdit(ev) {
   if (el.classList.contains("site-select")) {
     assoc.siteAtual = el.value;
     saveAssocField(key, { siteAtual: el.value });
-    applyAssocFilters();
+    renderAssoc();
   } else if (el.classList.contains("site-link")) {
     assoc.link = el.value;
     saveAssocField(key, { link: el.value });
+    refreshLinkButtons(el);
   } else if (el.classList.contains("assoc-sigla")) {
     assoc.sigla = el.value;
     saveAssocField(key, { sigla: el.value });
-    applyAssocFilters();
+    renderAssoc();
   } else if (el.classList.contains("assoc-nome")) {
     assoc.nome = el.value;
     saveAssocField(key, { nome: el.value });
   } else if (el.classList.contains("assoc-remodela")) {
     assoc.remodelacao = el.checked;
     saveAssocField(key, { remodelacao: el.checked });
-    applyRemodela();
+    renderRemodela();
+    renderNavCounts();
+    toast(el.checked ? `"${assoc.sigla}" entrou na fila de remodelação.` : `"${assoc.sigla}" saiu da fila.`, "info");
+    return;
   }
+  toastSaved();
 }
 
-function handleAssocClick(ev) {
-  const btn = ev.target.closest("button[data-key]");
+async function handleAssocClick(ev) {
+  const btn = ev.target.closest("button[data-act]");
   if (!btn) return;
   const key = btn.dataset.key;
   const assoc = ASSOCIACOES.find((a) => a.key === key);
   if (!assoc) return;
 
-  if (btn.classList.contains("btn-remove")) {
-    if (!confirm(`Excluir "${assoc.sigla}" da gestão de sites?`)) return;
+  if (btn.dataset.act === "open") return openLink(assoc.link);
+  if (btn.dataset.act === "copy") return copyLink(assoc.link);
+
+  if (btn.dataset.act === "del") {
+    const ok = await confirmDialog(
+      "Excluir associação",
+      `"${assoc.sigla}" sai do painel. Você pode trazê-la de volta adicionando a mesma sigla novamente.`,
+      "Excluir"
+    );
+    if (!ok) return;
     assoc.removed = true;
     saveAssocField(key, { removed: true });
+    renderAssoc();
+    renderRemodela();
+    toast(`"${assoc.sigla}" excluída.`);
   }
-  applyAssocFilters();
 }
 
 // ---------------------------------------------------------------------------
-// Aba Eventos
+// Aba: Eventos
 // ---------------------------------------------------------------------------
 
-function renderEventoStats(allList) {
-  const list = allList.filter((e) => !e.removed);
+function renderEventoMetrics(list) {
   const total = list.length;
   const aAcontecer = list.filter((e) => e.statusManual === "a_acontecer").length;
   const acontecendo = list.filter((e) => e.statusManual === "acontecendo").length;
   const realizado = list.filter((e) => e.statusManual === "realizado").length;
   const comSite = list.filter((e) => e.link).length;
+  const wordpress = list.filter((e) => e.siteAtual === "wordpress").length;
+  const personalizado = list.filter((e) => e.siteAtual === "personalizado").length;
+  const hotsite = list.filter((e) => e.siteAtual === "hotsite").length;
 
-  const cards = [
-    { value: total, label: "Eventos" },
-    { value: aAcontecer, label: "A acontecer" },
-    { value: acontecendo, label: "Acontecendo" },
-    { value: realizado, label: "Realizados" },
-    { value: comSite, label: "Com site" },
-  ];
+  document.getElementById("evento-metrics").innerHTML = metricsHtml([
+    { label: "Eventos", value: total, note: `${total - comSite} sem endereço cadastrado` },
+    { label: "Com site no ar", value: comSite, dot: "d-ok", note: `${pct(comSite, total)}% do recorte` },
+    { label: "Fora do WordPress", value: personalizado + hotsite, dot: "d-accent", note: `${pct(personalizado + hotsite, total)}% já migrado` },
+    { label: "Ainda por acontecer", value: aAcontecer + acontecendo, dot: "d-warn", note: "Janela aberta para migrar" },
+  ]);
 
-  document.getElementById("evento-stats").innerHTML = cards
-    .map((c) => `<div class="stat-card"><div class="value">${c.value}</div><div class="label">${c.label}</div></div>`)
-    .join("");
+  document.getElementById("evento-composition").innerHTML =
+    compositionHtml("Status", [
+      { cls: "s-ok", label: "Acontecendo", count: acontecendo },
+      { cls: "s-warn", label: "A acontecer", count: aAcontecer },
+      { cls: "s-off", label: "Realizado", count: realizado },
+    ]) +
+    compositionHtml("Tipo de site", [
+      { cls: "s-off", label: "WordPress", count: wordpress },
+      { cls: "s-accent", label: "Personalizado", count: personalizado },
+      { cls: "s-ok", label: "Hotsite", count: hotsite },
+    ]);
 }
 
 function renderEventoTable(list) {
   const tbody = document.getElementById("evento-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhum evento encontrado com esses filtros.</td></tr>';
+    tbody.innerHTML = emptyRow(5, "Nenhum evento", "Nenhum evento bate com esses filtros. Ajuste a busca ou o status.");
     return;
   }
+
   tbody.innerHTML = list
-    .map(
-      (e) => `<tr>
-        <td><div class="name-cell-fields">
-          <input class="evento-shortname" type="text" data-id="${e.id}" value="${(e.shortName || "").replace(/"/g, "&quot;")}" placeholder="Nome curto" />
-          <input class="evento-nome" type="text" data-id="${e.id}" value="${(e.nome || "").replace(/"/g, "&quot;")}" placeholder="Nome completo" />
-        </div></td>
-        <td>${statusManualSelect(e.id, e.statusManual)}</td>
-        <td>${eventoSiteAtualSelect(e.id, e.siteAtual)}</td>
-        <td>${eventoLinkInput(e.id, e.link)}</td>
-        <td><button class="btn-remove" data-id="${e.id}">Excluir</button></td>
-      </tr>`
-    )
+    .map((e) => {
+      const k = `data-id="${esc(e.id)}"`;
+      return `<tr>
+        <td class="ident-td" data-l="Evento">
+          <div class="ident">
+            ${avatar(e.sigla || e.shortName || e.nome)}
+            <div class="ident-fields">
+              <input class="f f-strong evento-shortname" type="text" ${k} value="${esc(e.shortName)}" placeholder="Nome curto" />
+              <input class="f f-sub evento-nome" type="text" ${k} value="${esc(e.nome)}" placeholder="Nome completo" />
+            </div>
+          </div>
+        </td>
+        <td data-l="Status">${selectField("evento-status-select", k, e.statusManual, STATUS_MANUAL_OPTIONS)}</td>
+        <td data-l="Tipo de site">${selectField("evento-site-select", k, e.siteAtual, SITE_ATUAL_OPTIONS)}</td>
+        <td data-l="Endereço">${linkCell("evento-link", k, e.link)}</td>
+        <td class="actions" data-l="">
+          <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
+        </td>
+      </tr>`;
+    })
     .join("");
 }
 
-function applyEventoFilters() {
-  const q = document.getElementById("evento-search").value.trim().toLowerCase();
-  const status = document.getElementById("evento-filter-status").value;
-  const siteAtual = document.getElementById("evento-filter-site").value;
-
+function renderEvento() {
+  const s = STATE.evento;
   const filtered = EVENTOS.filter((e) => {
     if (e.removed) return false;
-    if (q && !`${e.nome} ${e.shortName || ""} ${e.associacao || ""} ${e.sigla || ""}`.toLowerCase().includes(q)) return false;
-    if (status && e.statusManual !== status) return false;
-    if (siteAtual && e.siteAtual !== siteAtual) return false;
+    if (s.q && !`${e.nome} ${e.shortName || ""} ${e.associacao || ""} ${e.sigla || ""}`.toLowerCase().includes(s.q)) return false;
+    if (s.status && e.statusManual !== s.status) return false;
+    if (s.site && e.siteAtual !== s.site) return false;
     return true;
   });
 
-  renderEventoStats(filtered);
-  renderEventoTable(filtered);
-}
+  const sorted = sortList(filtered, s.sort, "evento");
+  VIEW.evento = sorted;
 
-function handleEventoClick(ev) {
-  const btn = ev.target.closest("button[data-id]");
-  if (!btn) return;
-  const id = btn.dataset.id;
-  const evento = EVENTOS.find((e) => e.id === id);
-  if (!evento) return;
+  renderEventoMetrics(sorted);
+  renderEventoTable(sorted);
 
-  if (btn.classList.contains("btn-remove")) {
-    if (!confirm(`Excluir "${evento.shortName || evento.nome}" da gestão de sites?`)) return;
-    evento.removed = true;
-    saveEventoField(id, { removed: true });
-  }
-  applyEventoFilters();
+  const totalAtivos = EVENTOS.filter((e) => !e.removed).length;
+  document.getElementById("evento-count").textContent =
+    sorted.length === totalAtivos ? `${totalAtivos} no total` : `${sorted.length} de ${totalAtivos}`;
+  renderNavCounts();
 }
 
 function handleEventoEdit(ev) {
@@ -517,14 +890,15 @@ function handleEventoEdit(ev) {
   if (el.classList.contains("evento-status-select")) {
     evento.statusManual = el.value;
     saveEventoField(id, { statusManual: el.value });
-    applyEventoFilters();
+    renderEvento();
   } else if (el.classList.contains("evento-site-select")) {
     evento.siteAtual = el.value;
     saveEventoField(id, { siteAtual: el.value });
-    applyEventoFilters();
+    renderEvento();
   } else if (el.classList.contains("evento-link")) {
     evento.link = el.value;
     saveEventoField(id, { link: el.value });
+    refreshLinkButtons(el);
   } else if (el.classList.contains("evento-shortname")) {
     evento.shortName = el.value;
     saveEventoField(id, { shortName: el.value });
@@ -532,89 +906,125 @@ function handleEventoEdit(ev) {
     evento.nome = el.value;
     saveEventoField(id, { nome: el.value });
   }
+  toastSaved();
+}
+
+async function handleEventoClick(ev) {
+  const btn = ev.target.closest("button[data-act]");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const evento = EVENTOS.find((e) => e.id === id);
+  if (!evento) return;
+
+  if (btn.dataset.act === "open") return openLink(evento.link);
+  if (btn.dataset.act === "copy") return copyLink(evento.link);
+
+  if (btn.dataset.act === "del") {
+    const nome = evento.shortName || evento.nome;
+    const ok = await confirmDialog("Excluir evento", `"${nome}" sai do painel de sites de eventos.`, "Excluir");
+    if (!ok) return;
+    evento.removed = true;
+    saveEventoField(id, { removed: true });
+    renderEvento();
+    toast(`"${nome}" excluído.`);
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Aba Sites em remodelação (fila priorizada por MRR)
+// Aba: Fila de remodelação
 // ---------------------------------------------------------------------------
-
-function withProto(link) {
-  if (!link) return "#";
-  return /^https?:\/\//i.test(link) ? link : `https://${link}`;
-}
-
-function displayLink(link) {
-  return (link || "").replace(/^https?:\/\//i, "").replace(/\/$/, "");
-}
 
 function getRemodelaQueue() {
-  return ASSOCIACOES.filter((a) => a.remodelacao && !a.removed).sort(
-    (x, y) => (y.mrr || 0) - (x.mrr || 0)
-  );
+  return ASSOCIACOES.filter((a) => a.remodelacao && !a.removed).sort((x, y) => (y.mrr || 0) - (x.mrr || 0));
 }
 
-function prioridadeBadge(rank) {
-  let cls = "prio-low";
-  if (rank <= 3) cls = "prio-high";
-  else if (rank <= 10) cls = "prio-mid";
-  return `<span class="prio-badge ${cls}">${rank}º</span>`;
+function rankBadge(rank) {
+  let cls = "";
+  if (rank <= 3) cls = " r-top";
+  else if (rank <= 10) cls = " r-mid";
+  return `<span class="rank${cls}">${rank}º</span>`;
 }
 
-function renderRemodelaTable(ranked) {
+function renderRemodelaMetrics(queue) {
+  const total = queue.length;
+  const feitas = queue.filter((a) => a.novaVersao).length;
+  const mrr = queue.reduce((s, a) => s + (a.mrr || 0), 0);
+  const mrrPendente = queue.filter((a) => !a.novaVersao).reduce((s, a) => s + (a.mrr || 0), 0);
+
+  document.getElementById("remodela-metrics").innerHTML = metricsHtml([
+    { label: "Na fila", value: total, dot: "d-accent", note: "Marcadas para remodelar" },
+    { label: "Novas versões prontas", value: feitas, dot: "d-ok", note: `${pct(feitas, total)}% concluído` },
+    { label: "Pendentes", value: total - feitas, dot: "d-warn", note: "Ainda no modelo antigo" },
+    { label: "MRR represado", value: currency.format(mrrPendente), money: true, note: `de ${currency.format(mrr)} na fila` },
+  ]);
+
+  const prog = document.getElementById("remodela-progress");
+  prog.innerHTML = total
+    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(feitas, total)}%"></div></div>
+       <span>${feitas}/${total} concluídas</span>`
+    : "";
+}
+
+function renderRemodelaTable(list) {
   const tbody = document.getElementById("remodela-table-body");
-  if (ranked.length === 0) {
-    tbody.innerHTML =
-      '<tr class="empty-row"><td colspan="8">Nenhum site na fila. Marque associações em <strong>Remodelar</strong> na aba Associações, ou use <strong>+ Adicionar à fila</strong> acima.</td></tr>';
+  if (list.length === 0) {
+    tbody.innerHTML = emptyRow(
+      7,
+      "Fila vazia",
+      "Ative a chave <strong>Remodelar</strong> em Associações, ou use o botão “Adicionar à fila” aqui em cima."
+    );
     return;
   }
-  tbody.innerHTML = ranked
-    .map(
-      (a) => `<tr class="${a.novaVersao ? "rmd-done" : ""}">
-        <td>${prioridadeBadge(a._rank)}</td>
-        <td><div class="name-cell">${avatar(a.sigla)}<input class="rmd-nome" type="text" data-key="${a.key}" value="${(a.nome || "").replace(/"/g, "&quot;")}" placeholder="Nome completo" /></div></td>
-        <td><input class="rmd-sigla-inp" type="text" data-key="${a.key}" value="${(a.sigla || "").replace(/"/g, "&quot;")}" placeholder="Sigla" /></td>
-        <td><input class="rmd-mrr-inp" type="text" inputmode="numeric" data-key="${a.key}" value="${a.mrr != null ? a.mrr : ""}" placeholder="0" /></td>
-        <td><input class="rmd-site-link" type="text" data-key="${a.key}" value="${(a.link || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
-        <td class="remodela-cell"><label class="remodela-check"><input type="checkbox" class="rmd-nv-check" data-key="${a.key}" ${a.novaVersao ? "checked" : ""} /><span>Feita</span></label></td>
-        <td><input class="rmd-nv-link" type="text" data-key="${a.key}" value="${(a.novaVersaoLink || "").replace(/"/g, "&quot;")}" placeholder="https://..." /></td>
-        <td><button class="btn-remove" data-key="${a.key}">Remover</button></td>
-      </tr>`
-    )
+
+  tbody.innerHTML = list
+    .map((a) => {
+      const k = `data-key="${esc(a.key)}"`;
+      return `<tr class="${a.novaVersao ? "done" : ""}">
+        <td data-l="Prioridade">${rankBadge(a._rank)}</td>
+        <td class="ident-td" data-l="Associação">
+          <div class="ident">
+            ${avatar(a.sigla)}
+            <div class="ident-fields">
+              <input class="f f-strong rmd-sigla-inp" type="text" ${k} value="${esc(a.sigla)}" placeholder="Sigla" />
+              <input class="f f-sub rmd-nome" type="text" ${k} value="${esc(a.nome)}" placeholder="Nome completo" />
+            </div>
+          </div>
+        </td>
+        <td class="num" data-l="MRR"><input class="f f-num rmd-mrr-inp" type="text" inputmode="numeric" ${k} value="${a.mrr != null ? a.mrr : ""}" placeholder="0" /></td>
+        <td data-l="Site atual">${linkCell("rmd-site-link", k, a.link)}</td>
+        <td class="center" data-l="Nova versão">${switchField("rmd-nv-check", k, a.novaVersao, a.novaVersao ? "Feita" : "Pendente")}</td>
+        <td data-l="Endereço novo">${linkCell("rmd-nv-link", k, a.novaVersaoLink)}</td>
+        <td class="actions" data-l="">
+          <button class="mini danger" type="button" data-act="unqueue" ${k} title="Tirar da fila" aria-label="Tirar da fila">${ICON.trash}</button>
+        </td>
+      </tr>`;
+    })
     .join("");
 }
 
-function applyRemodela() {
-  const searchEl = document.getElementById("remodela-search");
-  if (!searchEl) return;
-  const q = searchEl.value.trim().toLowerCase();
-  const nvFilter = document.getElementById("remodela-filter-nv").value;
-
+function renderRemodela() {
+  const s = STATE.remodela;
   const queue = getRemodelaQueue();
-  // Prioridade (nº) fixa por MRR.
+
+  // prioridade fixa por MRR; feitas vão para o fim mantendo a ordem
   const ranked = queue.map((a, i) => ({ ...a, _rank: i + 1 }));
-  // Feitos vão para o final, mantendo a prioridade (sort estável preserva a ordem por MRR dentro de cada grupo).
   const ordered = [...ranked].sort((a, b) => (a.novaVersao ? 1 : 0) - (b.novaVersao ? 1 : 0));
 
   const filtered = ordered.filter((a) => {
-    if (q && !`${a.sigla || ""} ${a.nome || ""}`.toLowerCase().includes(q)) return false;
-    if (nvFilter === "feita" && !a.novaVersao) return false;
-    if (nvFilter === "pendente" && a.novaVersao) return false;
+    if (s.q && !`${a.sigla || ""} ${a.nome || ""}`.toLowerCase().includes(s.q)) return false;
+    if (s.nv === "feita" && !a.novaVersao) return false;
+    if (s.nv === "pendente" && a.novaVersao) return false;
     return true;
   });
 
-  renderRemodelaTable(filtered);
-}
+  VIEW.remodela = filtered;
 
-function handleRemodelaClick(ev) {
-  const btn = ev.target.closest("button[data-key]");
-  if (!btn) return;
-  const key = btn.dataset.key;
-  const assoc = ASSOCIACOES.find((a) => a.key === key);
-  if (!assoc) return;
-  assoc.remodelacao = false;
-  saveAssocField(key, { remodelacao: false });
-  applyRemodela();
-  applyAssocFilters();
+  renderRemodelaMetrics(queue);
+  renderRemodelaTable(filtered);
+
+  document.getElementById("remodela-count").textContent =
+    filtered.length === queue.length ? `${queue.length} na fila` : `${filtered.length} de ${queue.length}`;
+  renderNavCounts();
 }
 
 function handleRemodelaEdit(ev) {
@@ -627,211 +1037,376 @@ function handleRemodelaEdit(ev) {
   if (el.classList.contains("rmd-nv-check")) {
     assoc.novaVersao = el.checked;
     saveAssocField(key, { novaVersao: el.checked });
-    applyRemodela();
-  } else if (el.classList.contains("rmd-nv-link")) {
+    renderRemodela();
+    toast(el.checked ? `Nova versão de "${assoc.sigla}" marcada como feita.` : `"${assoc.sigla}" voltou para pendente.`, "info");
+    return;
+  }
+  if (el.classList.contains("rmd-nv-link")) {
     assoc.novaVersaoLink = el.value;
     saveAssocField(key, { novaVersaoLink: el.value });
+    refreshLinkButtons(el);
   } else if (el.classList.contains("rmd-nome")) {
     assoc.nome = el.value;
     saveAssocField(key, { nome: el.value });
-    applyAssocFilters();
+    renderAssoc();
   } else if (el.classList.contains("rmd-sigla-inp")) {
     assoc.sigla = el.value;
     saveAssocField(key, { sigla: el.value });
-    applyRemodela();
-    applyAssocFilters();
+    renderRemodela();
+    renderAssoc();
   } else if (el.classList.contains("rmd-mrr-inp")) {
     const digits = el.value.replace(/[^\d]/g, "");
     const val = digits ? Number(digits) : null;
     assoc.mrr = val;
     saveAssocField(key, { mrr: val });
-    applyRemodela();
-    applyAssocFilters();
+    renderRemodela();
+    renderAssoc();
   } else if (el.classList.contains("rmd-site-link")) {
     assoc.link = el.value;
     saveAssocField(key, { link: el.value });
-    applyAssocFilters();
+    refreshLinkButtons(el);
+    renderAssoc();
+  }
+  toastSaved();
+}
+
+async function handleRemodelaClick(ev) {
+  const btn = ev.target.closest("button[data-act]");
+  if (!btn) return;
+  const key = btn.dataset.key;
+  const assoc = ASSOCIACOES.find((a) => a.key === key);
+  if (!assoc) return;
+
+  if (btn.dataset.act === "open" || btn.dataset.act === "copy") {
+    const input = btn.parentElement.querySelector("input");
+    const value = input ? input.value : "";
+    return btn.dataset.act === "open" ? openLink(value) : copyLink(value);
+  }
+
+  if (btn.dataset.act === "unqueue") {
+    const ok = await confirmDialog(
+      "Tirar da fila",
+      `"${assoc.sigla}" sai da fila de remodelação. A associação continua no inventário.`,
+      "Tirar da fila"
+    );
+    if (!ok) return;
+    assoc.remodelacao = false;
+    saveAssocField(key, { remodelacao: false });
+    renderRemodela();
+    renderAssoc();
+    toast(`"${assoc.sigla}" saiu da fila.`);
   }
 }
 
-function handleAddRemodela() {
-  const sigla = document.getElementById("new-remodela-sigla").value.trim();
-  const nome = document.getElementById("new-remodela-nome").value.trim();
+// ---------------------------------------------------------------------------
+// Ações de link
+// ---------------------------------------------------------------------------
 
-  if (!sigla) {
-    alert("Informe a sigla da associação.");
-    return false;
-  }
+// mantém os botões de abrir/copiar coerentes sem redesenhar a tabela inteira
+function refreshLinkButtons(input) {
+  const cell = input.closest(".linkcell");
+  if (!cell) return;
+  const has = !!input.value.trim();
+  cell.querySelectorAll("button[data-act]").forEach((b) => (b.disabled = !has));
+}
 
-  const existing = ASSOCIACOES.find((a) => norm(a.sigla) === norm(sigla));
-  if (existing) {
-    existing.removed = false;
-    existing.remodelacao = true;
-    const patch = { removed: false, remodelacao: true };
-    if (nome) {
-      existing.nome = nome;
-      patch.nome = nome;
-    }
-    saveAssocField(existing.key, patch);
+function openLink(link) {
+  const url = withProto(link);
+  if (!url) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function copyLink(link) {
+  const url = withProto(link);
+  if (!url) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(
+      () => toast(`Copiado: ${displayLink(url)}`, "info"),
+      () => toast("Não consegui copiar o endereço.", "warn")
+    );
   } else {
-    addManualAssoc(sigla, nome);
-    const a = ASSOCIACOES[ASSOCIACOES.length - 1];
-    a.remodelacao = true;
-    saveAssocField(a.key, { remodelacao: true });
+    toast("Cópia não suportada neste navegador.", "warn");
   }
-
-  applyRemodela();
-  applyAssocFilters();
-  return true;
 }
 
 // ---------------------------------------------------------------------------
-// Formulários de "adicionar"
+// Exportação CSV
 // ---------------------------------------------------------------------------
 
-function initAddForm(opts) {
-  const toggleBtn = document.getElementById(opts.toggleId);
-  const form = document.getElementById(opts.formId);
-  const cancelBtn = document.getElementById(opts.cancelId);
-  const submitBtn = document.getElementById(opts.submitId);
+function csvCell(v) {
+  const s = v == null ? "" : String(v);
+  return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
 
-  toggleBtn.addEventListener("click", () => {
-    form.classList.toggle("open");
-    if (form.classList.contains("open")) document.getElementById(opts.firstFieldId).focus();
+function download(name, text) {
+  const blob = new Blob([`﻿${text}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportCsv() {
+  let head;
+  let rows;
+  let name;
+
+  if (STATE.tab === "assoc") {
+    name = "associacoes.csv";
+    head = ["Sigla", "Nome", "Saúde", "MRR", "Site atual", "Endereço", "Na fila"];
+    rows = VIEW.assoc.map((a) => [
+      a.sigla,
+      a.nome || "",
+      (HEALTH_META[a.health] || {}).label || "",
+      a.mrr != null ? a.mrr : "",
+      labelOf(SITE_ATUAL_OPTIONS, a.siteAtual),
+      a.link || "",
+      a.remodelacao ? "sim" : "não",
+    ]);
+  } else if (STATE.tab === "evento") {
+    name = "eventos.csv";
+    head = ["Nome curto", "Nome", "Sigla", "Status", "Tipo de site", "Endereço"];
+    rows = VIEW.evento.map((e) => [
+      e.shortName || "",
+      e.nome || "",
+      e.sigla || "",
+      labelOf(STATUS_MANUAL_OPTIONS, e.statusManual),
+      labelOf(SITE_ATUAL_OPTIONS, e.siteAtual),
+      e.link || "",
+    ]);
+  } else {
+    name = "fila-remodelacao.csv";
+    head = ["Prioridade", "Sigla", "Nome", "MRR", "Site atual", "Nova versão", "Endereço novo"];
+    rows = VIEW.remodela.map((a) => [
+      a._rank,
+      a.sigla,
+      a.nome || "",
+      a.mrr != null ? a.mrr : "",
+      a.link || "",
+      a.novaVersao ? "feita" : "pendente",
+      a.novaVersaoLink || "",
+    ]);
+  }
+
+  if (!rows.length) {
+    toast("Não há linhas para exportar nessa visão.", "warn");
+    return;
+  }
+
+  const csv = [head, ...rows].map((r) => r.map(csvCell).join(";")).join("\r\n");
+  download(name, csv);
+  toast(`${rows.length} linha(s) exportadas.`);
+}
+
+// ---------------------------------------------------------------------------
+// Navegação, tema e atalhos
+// ---------------------------------------------------------------------------
+
+function renderNavCounts() {
+  document.getElementById("count-assoc").textContent = ASSOCIACOES.filter((a) => !a.removed).length;
+  document.getElementById("count-evento").textContent = EVENTOS.filter((e) => !e.removed).length;
+  document.getElementById("count-remodela").textContent = getRemodelaQueue().length;
+}
+
+function setTab(tab) {
+  STATE.tab = tab;
+  try {
+    localStorage.setItem(TAB_KEY, tab);
+  } catch (e) {}
+
+  document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+  document.getElementById(`panel-${tab}`).classList.add("active");
+
+  document.getElementById("page-title").textContent = PAGES[tab].title;
+  document.getElementById("page-sub").textContent = PAGES[tab].sub;
+  document.getElementById("btn-add-text").textContent = PAGES[tab].add;
+  document.getElementById("btn-add").title = PAGES[tab].add;
+
+  if (tab === "assoc") renderAssoc();
+  else if (tab === "evento") renderEvento();
+  else renderRemodela();
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function currentTheme() {
+  return (
+    document.documentElement.dataset.theme ||
+    (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+  );
+}
+
+function toggleTheme() {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  const root = document.documentElement;
+
+  root.classList.add("theme-switching");
+  root.dataset.theme = next;
+  requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
+
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch (e) {}
+  toast(next === "dark" ? "Tema escuro" : "Tema claro", "info");
+}
+
+function initChips(containerId, onPick) {
+  const box = document.getElementById(containerId);
+  box.addEventListener("click", (ev) => {
+    const chip = ev.target.closest(".chip");
+    if (!chip) return;
+    box.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c === chip));
+    onPick(chip.dataset.value);
   });
-
-  cancelBtn.addEventListener("click", () => {
-    form.classList.remove("open");
-    opts.fieldIds.forEach((id) => (document.getElementById(id).value = ""));
-  });
-
-  submitBtn.addEventListener("click", () => {
-    const ok = opts.onSubmit();
-    if (ok) {
-      opts.fieldIds.forEach((id) => (document.getElementById(id).value = ""));
-      form.classList.remove("open");
-    }
-  });
 }
 
-function handleAddAssoc() {
-  const siglaInput = document.getElementById("new-assoc-sigla");
-  const nomeInput = document.getElementById("new-assoc-nome");
-  const sigla = siglaInput.value.trim();
-  const nome = nomeInput.value.trim();
-
-  if (!sigla) {
-    alert("Informe a sigla da associação.");
-    return false;
-  }
-
-  const existing = ASSOCIACOES.find((a) => norm(a.sigla) === norm(sigla));
-  if (existing) {
-    if (!existing.removed) {
-      alert(`Já existe uma associação com a sigla "${sigla}".`);
-      return false;
-    }
-    // Recriar uma associação excluída apenas a restaura (não duplica).
-    existing.removed = false;
-    if (nome) existing.nome = nome;
-    saveAssocField(existing.key, nome ? { removed: false, nome } : { removed: false });
-    applyAssocFilters();
-    return true;
-  }
-
-  addManualAssoc(sigla, nome);
-  applyAssocFilters();
-  return true;
-}
-
-function handleAddEvento() {
-  const nomeInput = document.getElementById("new-evento-nome");
-  const siglaInput = document.getElementById("new-evento-sigla");
-  const nome = nomeInput.value.trim();
-  const sigla = siglaInput.value.trim();
-
-  if (!nome) {
-    alert("Informe o nome do evento.");
-    return false;
-  }
-
-  addManualEvento(nome, sigla);
-  applyEventoFilters();
-  return true;
-}
-
-// ---------------------------------------------------------------------------
-// Tabs + init
-// ---------------------------------------------------------------------------
-
-function initTabs() {
-  const tabs = document.querySelectorAll(".tab-btn");
-  tabs.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      tabs.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
-      document.getElementById(`panel-${btn.dataset.tab}`).classList.add("active");
-      if (btn.dataset.tab === "assoc") applyAssocFilters();
-      else if (btn.dataset.tab === "evento") applyEventoFilters();
-      else if (btn.dataset.tab === "remodela") applyRemodela();
+function initSort(panelId, stateKey, rerender, type) {
+  const panel = document.getElementById(panelId);
+  panel.querySelectorAll("th.sortable").forEach((th) => {
+    th.addEventListener("click", () => {
+      const sort = STATE[stateKey].sort;
+      const col = th.dataset.sort;
+      if (sort.col === col) sort.dir = sort.dir === "asc" ? "desc" : "asc";
+      else {
+        sort.col = col;
+        sort.dir = col === "mrr" ? "desc" : "asc";
+      }
+      panel.querySelectorAll("th.sortable").forEach((o) => o.classList.remove("sort-asc", "sort-desc"));
+      th.classList.add(sort.dir === "asc" ? "sort-asc" : "sort-desc");
+      rerender();
     });
   });
+  const first = panel.querySelector(`th.sortable[data-sort="${STATE[stateKey].sort.col}"]`);
+  if (first) first.classList.add(STATE[stateKey].sort.dir === "asc" ? "sort-asc" : "sort-desc");
 }
 
+// o cabeçalho da tabela gruda exatamente sob a barra do topo, seja qual for a
+// altura dela (que muda entre desktop e celular)
+function syncTopbarHeight() {
+  const topbar = document.querySelector(".topbar");
+  const apply = () =>
+    document.documentElement.style.setProperty("--topbar-h", `${Math.round(topbar.getBoundingClientRect().height)}px`);
+
+  apply();
+  if (window.ResizeObserver) new ResizeObserver(apply).observe(topbar);
+  else window.addEventListener("resize", apply);
+}
+
+function initDialogs() {
+  document.querySelectorAll("dialog.modal").forEach((dlg) => {
+    dlg.querySelectorAll("[data-close]").forEach((btn) => btn.addEventListener("click", () => dlg.close()));
+    dlg.addEventListener("click", (ev) => {
+      if (ev.target === dlg) dlg.close();
+    });
+  });
+
+  document.getElementById("btn-add").addEventListener("click", openAddDialog);
+  document.getElementById("dlg-add-submit").addEventListener("click", submitAddDialog);
+  document.getElementById("dlg-add-body").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    submitAddDialog();
+  });
+}
+
+function initShortcuts() {
+  document.addEventListener("keydown", (ev) => {
+    const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName);
+
+    if (ev.key === "/" && !typing && !ev.metaKey && !ev.ctrlKey) {
+      ev.preventDefault();
+      const input = document.querySelector(`#panel-${STATE.tab} .search input`);
+      if (input) input.focus();
+      return;
+    }
+
+    if (ev.key === "Escape") {
+      const input = document.querySelector(`#panel-${STATE.tab} .search input`);
+      if (input && document.activeElement === input && input.value) {
+        ev.preventDefault();
+        input.value = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+
 function init() {
-  initTabs();
-
-  applyAssocFilters();
-  applyEventoFilters();
-  applyRemodela();
-
-  ["assoc-search", "assoc-filter-health", "assoc-filter-site"].forEach((id) => {
-    document.getElementById(id).addEventListener("input", applyAssocFilters);
-  });
-  ["evento-search", "evento-filter-status", "evento-filter-site"].forEach((id) => {
-    document.getElementById(id).addEventListener("input", applyEventoFilters);
-  });
-  ["remodela-search", "remodela-filter-nv"].forEach((id) => {
-    document.getElementById(id).addEventListener("input", applyRemodela);
+  document.querySelectorAll(".nav-item").forEach((btn) => {
+    btn.addEventListener("click", () => setTab(btn.dataset.tab));
   });
 
-  document.getElementById("assoc-table-body").addEventListener("change", handleAssocEdit);
-  document.getElementById("assoc-table-body").addEventListener("click", handleAssocClick);
-  document.getElementById("evento-table-body").addEventListener("change", handleEventoEdit);
-  document.getElementById("evento-table-body").addEventListener("click", handleEventoClick);
-  document.getElementById("remodela-table-body").addEventListener("click", handleRemodelaClick);
-  document.getElementById("remodela-table-body").addEventListener("change", handleRemodelaEdit);
+  document.getElementById("btn-theme").addEventListener("click", toggleTheme);
+  document.getElementById("btn-export").addEventListener("click", exportCsv);
 
-  initAddForm({
-    toggleId: "assoc-add-toggle",
-    formId: "assoc-add-form",
-    cancelId: "assoc-add-cancel",
-    submitId: "assoc-add-submit",
-    firstFieldId: "new-assoc-sigla",
-    fieldIds: ["new-assoc-sigla", "new-assoc-nome"],
-    onSubmit: handleAddAssoc,
+  document.getElementById("assoc-search").addEventListener("input", (e) => {
+    STATE.assoc.q = e.target.value.trim().toLowerCase();
+    renderAssoc();
+  });
+  document.getElementById("evento-search").addEventListener("input", (e) => {
+    STATE.evento.q = e.target.value.trim().toLowerCase();
+    renderEvento();
+  });
+  document.getElementById("remodela-search").addEventListener("input", (e) => {
+    STATE.remodela.q = e.target.value.trim().toLowerCase();
+    renderRemodela();
   });
 
-  initAddForm({
-    toggleId: "evento-add-toggle",
-    formId: "evento-add-form",
-    cancelId: "evento-add-cancel",
-    submitId: "evento-add-submit",
-    firstFieldId: "new-evento-nome",
-    fieldIds: ["new-evento-nome", "new-evento-sigla"],
-    onSubmit: handleAddEvento,
+  initChips("assoc-chips-health", (v) => {
+    STATE.assoc.health = v;
+    renderAssoc();
+  });
+  initChips("assoc-chips-site", (v) => {
+    STATE.assoc.site = v;
+    renderAssoc();
+  });
+  initChips("evento-chips-status", (v) => {
+    STATE.evento.status = v;
+    renderEvento();
+  });
+  initChips("evento-chips-site", (v) => {
+    STATE.evento.site = v;
+    renderEvento();
+  });
+  initChips("remodela-chips-nv", (v) => {
+    STATE.remodela.nv = v;
+    renderRemodela();
   });
 
-  initAddForm({
-    toggleId: "remodela-add-toggle",
-    formId: "remodela-add-form",
-    cancelId: "remodela-add-cancel",
-    submitId: "remodela-add-submit",
-    firstFieldId: "new-remodela-sigla",
-    fieldIds: ["new-remodela-sigla", "new-remodela-nome"],
-    onSubmit: handleAddRemodela,
-  });
+  initSort("panel-assoc", "assoc", renderAssoc, "assoc");
+  initSort("panel-evento", "evento", renderEvento, "evento");
+
+  const assocBody = document.getElementById("assoc-table-body");
+  assocBody.addEventListener("change", handleAssocEdit);
+  assocBody.addEventListener("click", handleAssocClick);
+
+  const eventoBody = document.getElementById("evento-table-body");
+  eventoBody.addEventListener("change", handleEventoEdit);
+  eventoBody.addEventListener("click", handleEventoClick);
+
+  const remodelaBody = document.getElementById("remodela-table-body");
+  remodelaBody.addEventListener("change", handleRemodelaEdit);
+  remodelaBody.addEventListener("click", handleRemodelaClick);
+
+  initDialogs();
+  initShortcuts();
+  syncTopbarHeight();
+
+  renderAssoc();
+  renderEvento();
+  renderRemodela();
+
+  let saved = null;
+  try {
+    saved = localStorage.getItem(TAB_KEY);
+  } catch (e) {}
+  setTab(PAGES[saved] ? saved : "assoc");
 }
 
 document.addEventListener("DOMContentLoaded", init);
