@@ -805,11 +805,13 @@ td.center { text-align: center; }
   transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
 .f::placeholder { color: var(--text-3); opacity: 0.7; }
-.f:hover { background: var(--surface); border-color: var(--line-2); }
+/* background-color e não o atalho background: o atalho zeraria a
+   background-image que desenha a seta dos selects */
+.f:hover { background-color: var(--surface); border-color: var(--line-2); }
 tbody tr:hover .f:not(:hover):not(:focus) { border-color: color-mix(in srgb, var(--line-2) 45%, transparent); }
 .f:focus {
   outline: none;
-  background: var(--surface);
+  background-color: var(--surface);
   border-color: var(--accent);
   box-shadow: var(--ring);
 }
@@ -940,8 +942,34 @@ tbody tr:hover .mini, .mini:focus-visible { opacity: 1; }
 .rank.r-top { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
 .rank.r-mid { background: var(--warn-soft); border-color: var(--warn-line); color: var(--warn); }
 
-tr.done .ident-fields, tr.done .f-num, tr.done .rank { opacity: 0.5; }
-tr.done:hover .ident-fields, tr.done:hover .f-num, tr.done:hover .rank { opacity: 1; }
+/* ------------------------------------------- estado da nova versão (3 vias) */
+
+select.nv-select {
+  min-width: 108px;
+  padding: 5px 24px 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+select.nv-feita { background-color: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+select.nv-pendente { background-color: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
+select.nv-nao { background-color: var(--risk-soft); color: var(--risk); border-color: var(--risk-line); }
+
+/* o hover/foco genérico do .f troca o fundo por --surface; aqui a cor do
+   estado precisa vencer, senão a pílula perde a identidade ao passar o mouse */
+select.nv-feita:hover, select.nv-feita:focus { background-color: var(--ok-soft); }
+select.nv-pendente:hover, select.nv-pendente:focus { background-color: var(--warn-soft); }
+select.nv-nao:hover, select.nv-nao:focus { background-color: var(--risk-soft); }
+select.nv-select:hover { border-color: currentColor; }
+
+/* linhas já resolvidas descem de tom; "não" também perde saturação */
+tr.done .ident-fields, tr.done .f-num, tr.done .rank,
+tr.skip .ident-fields, tr.skip .f-num, tr.skip .rank { opacity: 0.5; }
+tr.done:hover .ident-fields, tr.done:hover .f-num, tr.done:hover .rank,
+tr.skip:hover .ident-fields, tr.skip:hover .f-num, tr.skip:hover .rank { opacity: 1; }
+tr.skip .linkcell { opacity: 0.55; }
+tr.skip:hover .linkcell { opacity: 1; }
 
 .muted { color: var(--text-3); }
 
@@ -1178,7 +1206,10 @@ dialog.modal[open] { animation: modal-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) bot
   tbody td.actions::before { flex: 1; text-align: left; }
   .mini { opacity: 1; width: 34px; height: 34px; }
   .linkcell { min-width: 0; flex: 1; }
-  .f { background: var(--surface-2); border-color: var(--line); }
+  .f { background-color: var(--surface-2); border-color: var(--line); }
+  /* no cartão o rótulo já fica à esquerda; alinhar o número à direita
+     deixaria o valor solto no fim de um campo largo */
+  .f-num { text-align: left; }
   .card-head { flex-wrap: wrap; }
 }
 

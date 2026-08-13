@@ -147,7 +147,8 @@ function buildAssociacoes() {
       link: saved.link != null ? saved.link : defaultLink,
       removed: !!saved.removed,
       remodelacao: !!saved.remodelacao,
-      novaVersao: !!saved.novaVersao,
+      // migra o antigo booleano novaVersao para os três estados
+      novaVersaoStatus: saved.novaVersaoStatus || (saved.novaVersao ? "feita" : "pendente"),
       novaVersaoLink: saved.novaVersaoLink != null ? saved.novaVersaoLink : "",
       manual: false,
     };
@@ -169,7 +170,7 @@ function addManualAssoc(sigla, nome) {
     link: "",
     removed: false,
     remodelacao: false,
-    novaVersao: false,
+    novaVersaoStatus: "pendente",
     novaVersaoLink: "",
   };
   manual.push(record);
@@ -189,6 +190,19 @@ const SITE_ATUAL_OPTIONS = [
   { value: "hotsite", label: "Hotsite" },
 ];
 
+// estado da nova versão: "não" significa que aquele site não será remodelado,
+// então some do cálculo de progresso e vai para o fim da fila
+const NOVA_VERSAO_OPTIONS = [
+  { value: "feita", label: "Feito" },
+  { value: "pendente", label: "Pendente" },
+  { value: "nao", label: "Não" },
+];
+
+const NV_ORDER = { pendente: 0, feita: 1, nao: 2 };
+
+// eventos sem ano na origem (planilha, cadastro manual) assumem o ano corrente
+const ANO_ATUAL = new Date().getFullYear();
+
 function buildEventos() {
   const fromCrm = EVENTS_CRM.map((e) => {
     const vercel = VERCEL_EVENT[e.id] || null;
@@ -204,7 +218,7 @@ function buildEventos() {
       nome: saved.nome != null ? saved.nome : e.nome,
       shortName: saved.shortName != null ? saved.shortName : e.shortName,
       edicao: e.edicao,
-      ano: e.ano,
+      ano: saved.ano != null ? saved.ano : e.ano != null ? e.ano : ANO_ATUAL,
       cidade: e.cidade,
       estado: e.estado,
       statusManual: saved.statusManual || defaultStatusManual,
@@ -225,7 +239,7 @@ function buildEventos() {
       nome: saved.nome != null ? saved.nome : r.nome,
       shortName: saved.shortName != null ? saved.shortName : null,
       edicao: null,
-      ano: null,
+      ano: saved.ano != null ? saved.ano : ANO_ATUAL,
       cidade: null,
       estado: null,
       statusManual: saved.statusManual || "realizado",
@@ -250,7 +264,7 @@ function addManualEvento(nome, sigla) {
     nome,
     shortName: null,
     edicao: null,
-    ano: null,
+    ano: ANO_ATUAL,
     cidade: null,
     estado: null,
     statusManual: "a_acontecer",
@@ -619,9 +633,9 @@ function sortList(list, sort, type) {
   return [...list].sort((a, b) => {
     let x;
     let y;
-    if (col === "mrr") {
-      x = a.mrr == null ? -1 : a.mrr;
-      y = b.mrr == null ? -1 : b.mrr;
+    if (col === "mrr" || col === "ano") {
+      x = a[col] == null ? -1 : a[col];
+      y = b[col] == null ? -1 : b[col];
     } else if (col === "health") {
       x = HEALTH_ORDER[a.health] == null ? 9 : HEALTH_ORDER[a.health];
       y = HEALTH_ORDER[b.health] == null ? 9 : HEALTH_ORDER[b.health];
@@ -830,7 +844,7 @@ function renderEventoMetrics(list) {
 function renderEventoTable(list) {
   const tbody = document.getElementById("evento-table-body");
   if (list.length === 0) {
-    tbody.innerHTML = emptyRow(5, "Nenhum evento", "Nenhum evento bate com esses filtros. Ajuste a busca ou o status.");
+    tbody.innerHTML = emptyRow(6, "Nenhum evento", "Nenhum evento bate com esses filtros. Ajuste a busca, o ano ou o status.");
     return;
   }
 
@@ -847,6 +861,7 @@ function renderEventoTable(list) {
             </div>
           </div>
         </td>
+        <td class="num" data-l="Ano"><input class="f f-num evento-ano" type="text" inputmode="numeric" maxlength="4" ${k} value="${esc(e.ano)}" placeholder="${ANO_ATUAL}" /></td>
         <td data-l="Status">${selectField("evento-status-select", k, e.statusManual, STATUS_MANUAL_OPTIONS)}</td>
         <td data-l="Tipo de site">${selectField("evento-site-select", k, e.siteAtual, SITE_ATUAL_OPTIONS)}</td>
         <td data-l="Endereço">${linkCell("evento-link", k, e.link)}</td>
@@ -862,7 +877,8 @@ function renderEvento() {
   const s = STATE.evento;
   const filtered = EVENTOS.filter((e) => {
     if (e.removed) return false;
-    if (s.q && !`${e.nome} ${e.shortName || ""} ${e.associacao || ""} ${e.sigla || ""}`.toLowerCase().includes(s.q)) return false;
+    if (s.q && !`${e.nome} ${e.shortName || ""} ${e.associacao || ""} ${e.sigla || ""} ${e.ano || ""}`.toLowerCase().includes(s.q))
+      return false;
     if (s.status && e.statusManual !== s.status) return false;
     if (s.site && e.siteAtual !== s.site) return false;
     return true;
@@ -899,6 +915,13 @@ function handleEventoEdit(ev) {
     evento.link = el.value;
     saveEventoField(id, { link: el.value });
     refreshLinkButtons(el);
+  } else if (el.classList.contains("evento-ano")) {
+    // campo vazio volta para o ano corrente, que é o padrão da coluna
+    const digits = el.value.replace(/[^\d]/g, "").slice(0, 4);
+    const val = digits ? Number(digits) : ANO_ATUAL;
+    evento.ano = val;
+    saveEventoField(id, { ano: val });
+    renderEvento();
   } else if (el.classList.contains("evento-shortname")) {
     evento.shortName = el.value;
     saveEventoField(id, { shortName: el.value });
@@ -947,21 +970,28 @@ function rankBadge(rank) {
 
 function renderRemodelaMetrics(queue) {
   const total = queue.length;
-  const feitas = queue.filter((a) => a.novaVersao).length;
+  const feitas = queue.filter((a) => a.novaVersaoStatus === "feita").length;
+  const pendentes = queue.filter((a) => a.novaVersaoStatus === "pendente").length;
+  const nao = queue.filter((a) => a.novaVersaoStatus === "nao").length;
+
+  // "não" sai da conta de progresso: não é trabalho que ainda vá acontecer
+  const previstas = total - nao;
   const mrr = queue.reduce((s, a) => s + (a.mrr || 0), 0);
-  const mrrPendente = queue.filter((a) => !a.novaVersao).reduce((s, a) => s + (a.mrr || 0), 0);
+  const mrrPendente = queue
+    .filter((a) => a.novaVersaoStatus === "pendente")
+    .reduce((s, a) => s + (a.mrr || 0), 0);
 
   document.getElementById("remodela-metrics").innerHTML = metricsHtml([
-    { label: "Na fila", value: total, dot: "d-accent", note: "Marcadas para remodelar" },
-    { label: "Novas versões prontas", value: feitas, dot: "d-ok", note: `${pct(feitas, total)}% concluído` },
-    { label: "Pendentes", value: total - feitas, dot: "d-warn", note: "Ainda no modelo antigo" },
+    { label: "Na fila", value: total, dot: "d-accent", note: nao ? `${nao} marcada(s) como “Não”` : "Marcadas para remodelar" },
+    { label: "Novas versões prontas", value: feitas, dot: "d-ok", note: `${pct(feitas, previstas)}% do que está previsto` },
+    { label: "Pendentes", value: pendentes, dot: "d-warn", note: "Ainda no modelo antigo" },
     { label: "MRR represado", value: currency.format(mrrPendente), money: true, note: `de ${currency.format(mrr)} na fila` },
   ]);
 
   const prog = document.getElementById("remodela-progress");
-  prog.innerHTML = total
-    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(feitas, total)}%"></div></div>
-       <span>${feitas}/${total} concluídas</span>`
+  prog.innerHTML = previstas
+    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(feitas, previstas)}%"></div></div>
+       <span>${feitas}/${previstas} concluídas</span>`
     : "";
 }
 
@@ -979,7 +1009,8 @@ function renderRemodelaTable(list) {
   tbody.innerHTML = list
     .map((a) => {
       const k = `data-key="${esc(a.key)}"`;
-      return `<tr class="${a.novaVersao ? "done" : ""}">
+      const rowCls = a.novaVersaoStatus === "feita" ? "done" : a.novaVersaoStatus === "nao" ? "skip" : "";
+      return `<tr class="${rowCls}">
         <td data-l="Prioridade">${rankBadge(a._rank)}</td>
         <td class="ident-td" data-l="Associação">
           <div class="ident">
@@ -992,7 +1023,12 @@ function renderRemodelaTable(list) {
         </td>
         <td class="num" data-l="MRR"><input class="f f-num rmd-mrr-inp" type="text" inputmode="numeric" ${k} value="${a.mrr != null ? a.mrr : ""}" placeholder="0" /></td>
         <td data-l="Site atual">${linkCell("rmd-site-link", k, a.link)}</td>
-        <td class="center" data-l="Nova versão">${switchField("rmd-nv-check", k, a.novaVersao, a.novaVersao ? "Feita" : "Pendente")}</td>
+        <td data-l="Nova versão">${selectField(
+          `nv-select nv-${a.novaVersaoStatus} rmd-nv-select`,
+          k,
+          a.novaVersaoStatus,
+          NOVA_VERSAO_OPTIONS
+        )}</td>
         <td data-l="Endereço novo">${linkCell("rmd-nv-link", k, a.novaVersaoLink)}</td>
         <td class="actions" data-l="">
           <button class="mini danger" type="button" data-act="unqueue" ${k} title="Tirar da fila" aria-label="Tirar da fila">${ICON.trash}</button>
@@ -1008,12 +1044,12 @@ function renderRemodela() {
 
   // prioridade fixa por MRR; feitas vão para o fim mantendo a ordem
   const ranked = queue.map((a, i) => ({ ...a, _rank: i + 1 }));
-  const ordered = [...ranked].sort((a, b) => (a.novaVersao ? 1 : 0) - (b.novaVersao ? 1 : 0));
+  // pendentes primeiro, feitas depois, "não" no fim de tudo
+  const ordered = [...ranked].sort((a, b) => NV_ORDER[a.novaVersaoStatus] - NV_ORDER[b.novaVersaoStatus]);
 
   const filtered = ordered.filter((a) => {
     if (s.q && !`${a.sigla || ""} ${a.nome || ""}`.toLowerCase().includes(s.q)) return false;
-    if (s.nv === "feita" && !a.novaVersao) return false;
-    if (s.nv === "pendente" && a.novaVersao) return false;
+    if (s.nv && a.novaVersaoStatus !== s.nv) return false;
     return true;
   });
 
@@ -1034,11 +1070,17 @@ function handleRemodelaEdit(ev) {
   const assoc = ASSOCIACOES.find((a) => a.key === key);
   if (!assoc) return;
 
-  if (el.classList.contains("rmd-nv-check")) {
-    assoc.novaVersao = el.checked;
-    saveAssocField(key, { novaVersao: el.checked });
+  if (el.classList.contains("rmd-nv-select")) {
+    assoc.novaVersaoStatus = el.value;
+    // grava o booleano antigo junto, para não quebrar dados já salvos
+    saveAssocField(key, { novaVersaoStatus: el.value, novaVersao: el.value === "feita" });
     renderRemodela();
-    toast(el.checked ? `Nova versão de "${assoc.sigla}" marcada como feita.` : `"${assoc.sigla}" voltou para pendente.`, "info");
+    const msg = {
+      feita: `Nova versão de "${assoc.sigla}" marcada como feita.`,
+      pendente: `"${assoc.sigla}" voltou para pendente.`,
+      nao: `"${assoc.sigla}" marcada como “Não” e foi para o fim da fila.`,
+    };
+    toast(msg[el.value], "info");
     return;
   }
   if (el.classList.contains("rmd-nv-link")) {
@@ -1167,11 +1209,12 @@ function exportCsv() {
     ]);
   } else if (STATE.tab === "evento") {
     name = "eventos.csv";
-    head = ["Nome curto", "Nome", "Sigla", "Status", "Tipo de site", "Endereço"];
+    head = ["Nome curto", "Nome", "Sigla", "Ano", "Status", "Tipo de site", "Endereço"];
     rows = VIEW.evento.map((e) => [
       e.shortName || "",
       e.nome || "",
       e.sigla || "",
+      e.ano != null ? e.ano : "",
       labelOf(STATUS_MANUAL_OPTIONS, e.statusManual),
       labelOf(SITE_ATUAL_OPTIONS, e.siteAtual),
       e.link || "",
@@ -1185,7 +1228,7 @@ function exportCsv() {
       a.nome || "",
       a.mrr != null ? a.mrr : "",
       a.link || "",
-      a.novaVersao ? "feita" : "pendente",
+      labelOf(NOVA_VERSAO_OPTIONS, a.novaVersaoStatus),
       a.novaVersaoLink || "",
     ]);
   }
@@ -1272,7 +1315,7 @@ function initSort(panelId, stateKey, rerender, type) {
       if (sort.col === col) sort.dir = sort.dir === "asc" ? "desc" : "asc";
       else {
         sort.col = col;
-        sort.dir = col === "mrr" ? "desc" : "asc";
+        sort.dir = col === "mrr" || col === "ano" ? "desc" : "asc";
       }
       panel.querySelectorAll("th.sortable").forEach((o) => o.classList.remove("sort-asc", "sort-desc"));
       th.classList.add(sort.dir === "asc" ? "sort-asc" : "sort-desc");
