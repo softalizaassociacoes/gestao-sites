@@ -923,6 +923,12 @@ tbody tr:hover .mini, .mini:focus-visible { opacity: 1; }
 .b-risk { background: var(--risk-soft); color: var(--risk); border-color: var(--risk-line); }
 .b-off { background: var(--off-soft); color: var(--off); border-color: var(--off-line); }
 .b-none { background: transparent; color: var(--text-3); border-color: var(--line); }
+.b-accent { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.badge-sm { padding: 2px 8px 2px 7px; font-size: 10.5px; align-self: flex-start; }
+
+/* tipo de site empilhado sobre o endereço, para não abrir mais uma coluna */
+.stack { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.stack .linkcell { width: 100%; }
 
 .rank {
   display: inline-flex;

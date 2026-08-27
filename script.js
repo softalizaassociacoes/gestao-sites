@@ -147,6 +147,7 @@ function buildAssociacoes() {
       link: saved.link != null ? saved.link : defaultLink,
       removed: !!saved.removed,
       remodelacao: !!saved.remodelacao,
+      foraDaFila: !!saved.foraDaFila,
       // migra o antigo booleano novaVersao para os três estados
       novaVersaoStatus: saved.novaVersaoStatus || (saved.novaVersao ? "feita" : "pendente"),
       novaVersaoLink: saved.novaVersaoLink != null ? saved.novaVersaoLink : "",
@@ -154,7 +155,14 @@ function buildAssociacoes() {
     };
   });
 
-  const manual = loadManualAssoc().map((m) => ({ ...m, manual: true }));
+  // registros manuais antigos não têm novaVersaoStatus; sem esta normalização
+  // eles ficariam com estado indefinido e o seletor exibiria "Feito" à toa
+  const manual = loadManualAssoc().map((m) => ({
+    ...m,
+    manual: true,
+    foraDaFila: !!m.foraDaFila,
+    novaVersaoStatus: m.novaVersaoStatus || (m.novaVersao ? "feita" : "pendente"),
+  }));
   return [...fromCrm, ...manual];
 }
 
@@ -170,6 +178,7 @@ function addManualAssoc(sigla, nome) {
     link: "",
     removed: false,
     remodelacao: false,
+    foraDaFila: false,
     novaVersaoStatus: "pendente",
     novaVersaoLink: "",
   };
@@ -291,7 +300,7 @@ const STATE = {
   tab: "assoc",
   assoc: { q: "", health: "", site: "", sort: { col: "sigla", dir: "asc" } },
   evento: { q: "", status: "", site: "", sort: { col: "nome", dir: "asc" } },
-  remodela: { q: "", nv: "" },
+  remodela: { q: "", nv: "", origem: "" },
 };
 
 // última lista renderizada de cada aba — usada na exportação CSV
@@ -310,7 +319,7 @@ const PAGES = {
   },
   remodela: {
     title: "Fila de remodelação",
-    sub: "Ordenada por MRR — quem paga mais entra primeiro na régua.",
+    sub: "Todo site ainda em WordPress entra aqui, ordenado por MRR — quem paga mais primeiro.",
     add: "Adicionar à fila",
   },
 };
@@ -667,7 +676,7 @@ function renderAssocMetrics(list) {
   const semDado = total - saudavel - atencao - risco - cancelado;
   const migrados = personalizado + hotsite;
   const mrr = list.reduce((s, a) => s + (a.mrr || 0), 0);
-  const naFila = list.filter((a) => a.remodelacao).length;
+  const naFila = list.filter(isNaFila).length;
 
   document.getElementById("assoc-metrics").innerHTML = metricsHtml([
     { label: "Associações", value: total, note: `${semDado} sem dado de saúde` },
@@ -718,7 +727,7 @@ function renderAssocTable(list) {
         <td class="num" data-l="MRR">${a.mrr != null ? currency.format(a.mrr) : '<span class="muted">—</span>'}</td>
         <td data-l="Site atual">${selectField("site-select", k, a.siteAtual, SITE_ATUAL_OPTIONS)}</td>
         <td data-l="Endereço">${linkCell("site-link", k, a.link)}</td>
-        <td class="center" data-l="Remodelar">${switchField("assoc-remodela", k, a.remodelacao, "")}</td>
+        <td class="center" data-l="Remodelar">${switchField("assoc-remodela", k, isNaFila(a), "")}</td>
         <td class="actions" data-l="">
           <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
         </td>
@@ -772,10 +781,12 @@ function handleAssocEdit(ev) {
     assoc.nome = el.value;
     saveAssocField(key, { nome: el.value });
   } else if (el.classList.contains("assoc-remodela")) {
+    // desmarcar precisa gravar a dispensa, senão um site WordPress reentraria
     assoc.remodelacao = el.checked;
-    saveAssocField(key, { remodelacao: el.checked });
+    assoc.foraDaFila = !el.checked;
+    saveAssocField(key, { remodelacao: el.checked, foraDaFila: !el.checked });
+    renderAssoc();
     renderRemodela();
-    renderNavCounts();
     toast(el.checked ? `"${assoc.sigla}" entrou na fila de remodelação.` : `"${assoc.sigla}" saiu da fila.`, "info");
     return;
   }
@@ -957,8 +968,29 @@ async function handleEventoClick(ev) {
 // Aba: Fila de remodelação
 // ---------------------------------------------------------------------------
 
+// A fila é o backlog da migração: entra automaticamente todo site ainda em
+// WordPress, mais o que for marcado à mão. "foraDaFila" é a dispensa explícita,
+// necessária porque sem ela um site WordPress voltaria sozinho ao ser removido.
+function isNaFila(a) {
+  return !a.removed && !a.foraDaFila && (a.remodelacao || a.siteAtual === "wordpress");
+}
+
 function getRemodelaQueue() {
-  return ASSOCIACOES.filter((a) => a.remodelacao && !a.removed).sort((x, y) => (y.mrr || 0) - (x.mrr || 0));
+  return ASSOCIACOES.filter(isNaFila).sort((x, y) => (y.mrr || 0) - (x.mrr || 0));
+}
+
+const SITE_TIPO_BADGE = {
+  personalizado: { label: "Personalizado", cls: "b-accent" },
+  hotsite: { label: "Hotsite", cls: "b-ok" },
+};
+
+// WordPress é a regra nesta fila — repetir o selo em toda linha só encomprida a
+// tabela. Marcamos só a exceção: quem já saiu do WordPress e está aqui por
+// marcação manual.
+function siteTipoBadge(tipo) {
+  const meta = SITE_TIPO_BADGE[tipo];
+  if (!meta) return "";
+  return `<span class="badge ${meta.cls} badge-sm"><i></i>${meta.label}</span>`;
 }
 
 function rankBadge(rank) {
@@ -1001,7 +1033,7 @@ function renderRemodelaTable(list) {
     tbody.innerHTML = emptyRow(
       7,
       "Fila vazia",
-      "Ative a chave <strong>Remodelar</strong> em Associações, ou use o botão “Adicionar à fila” aqui em cima."
+      "Nenhum site em WordPress bate com esses filtros. Limpe a busca, ou use “Adicionar à fila” para incluir algo à mão."
     );
     return;
   }
@@ -1022,7 +1054,12 @@ function renderRemodelaTable(list) {
           </div>
         </td>
         <td class="num" data-l="MRR"><input class="f f-num rmd-mrr-inp" type="text" inputmode="numeric" ${k} value="${a.mrr != null ? a.mrr : ""}" placeholder="0" /></td>
-        <td data-l="Site atual">${linkCell("rmd-site-link", k, a.link)}</td>
+        <td data-l="Site atual">
+          <div class="stack">
+            ${siteTipoBadge(a.siteAtual)}
+            ${linkCell("rmd-site-link", k, a.link)}
+          </div>
+        </td>
         <td data-l="Nova versão">${selectField(
           `nv-select nv-${a.novaVersaoStatus} rmd-nv-select`,
           k,
@@ -1050,6 +1087,8 @@ function renderRemodela() {
   const filtered = ordered.filter((a) => {
     if (s.q && !`${a.sigla || ""} ${a.nome || ""}`.toLowerCase().includes(s.q)) return false;
     if (s.nv && a.novaVersaoStatus !== s.nv) return false;
+    if (s.origem === "wordpress" && a.siteAtual !== "wordpress") return false;
+    if (s.origem === "manual" && !a.remodelacao) return false;
     return true;
   });
 
@@ -1128,12 +1167,14 @@ async function handleRemodelaClick(ev) {
   if (btn.dataset.act === "unqueue") {
     const ok = await confirmDialog(
       "Tirar da fila",
-      `"${assoc.sigla}" sai da fila de remodelação. A associação continua no inventário.`,
+      `"${assoc.sigla}" sai da fila e não volta sozinha, mesmo continuando em WordPress. A associação segue no inventário.`,
       "Tirar da fila"
     );
     if (!ok) return;
+    // dispensa explícita: sem isso um site WordPress reentraria na fila
     assoc.remodelacao = false;
-    saveAssocField(key, { remodelacao: false });
+    assoc.foraDaFila = true;
+    saveAssocField(key, { remodelacao: false, foraDaFila: true });
     renderRemodela();
     renderAssoc();
     toast(`"${assoc.sigla}" saiu da fila.`);
@@ -1419,6 +1460,10 @@ function init() {
   });
   initChips("remodela-chips-nv", (v) => {
     STATE.remodela.nv = v;
+    renderRemodela();
+  });
+  initChips("remodela-chips-origem", (v) => {
+    STATE.remodela.origem = v;
     renderRemodela();
   });
 
