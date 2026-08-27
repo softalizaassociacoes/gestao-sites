@@ -35,6 +35,16 @@ function semearEventos() {
   return EVENTOS_BASE.map((e) => ({ ...e, removido: false }));
 }
 
+// Acrescenta à lista os registros da base que ainda não existem nela, casando
+// por chave. Sem isso, quem já tem cache (ou banco) de um deploy anterior
+// nunca enxerga as associações que entraram na base depois — foi o que fez a
+// aba Associações continuar com 56 em vez de 168.
+function completarComBase(lista, base, chaveDe) {
+  const vistos = new Set(lista.map(chaveDe));
+  const novos = base.filter((r) => !vistos.has(chaveDe(r)));
+  return { lista: novos.length ? [...lista, ...novos] : lista, novos };
+}
+
 function lerCache(chave) {
   try {
     const v = JSON.parse(localStorage.getItem(chave));
@@ -1474,22 +1484,49 @@ function initShortcuts() {
 
 async function carregarModelo() {
   const remoto = await carregarDoBanco();
+  const chaveA = (a) => a.chave;
+  const chaveE = (e) => e.id;
 
   if (remoto && remoto.associacoes.length) {
-    ASSOCIACOES = remoto.associacoes;
-    EVENTOS = remoto.eventos;
+    // o banco manda, mas o que entrou na base depois dele precisa ser somado
+    const a = completarComBase(remoto.associacoes, semearAssociacoes(), chaveA);
+    const e = completarComBase(remoto.eventos, semearEventos(), chaveE);
+    ASSOCIACOES = a.lista;
+    EVENTOS = e.lista;
     gravarCache();
-    marcarSincronia("Salvo no banco", "s-ok");
+
+    if (a.novos.length || e.novos.length) {
+      marcarSincronia("Salvo no banco", "s-ok");
+      await enviarNovos(a.novos, e.novos);
+    } else {
+      marcarSincronia("Salvo no banco", "s-ok");
+    }
     return;
   }
 
-  // banco vazio ou indisponível: parte do espelho local, senão da semente
-  ASSOCIACOES = lerCache(CACHE_ASSOC) || semearAssociacoes();
-  EVENTOS = lerCache(CACHE_EVENTO) || semearEventos();
+  // banco vazio ou indisponível: parte do espelho local, também completado
+  const cacheA = lerCache(CACHE_ASSOC);
+  const cacheE = lerCache(CACHE_EVENTO);
+  ASSOCIACOES = cacheA ? completarComBase(cacheA, semearAssociacoes(), chaveA).lista : semearAssociacoes();
+  EVENTOS = cacheE ? completarComBase(cacheE, semearEventos(), chaveE).lista : semearEventos();
   gravarCache();
 
   if (BANCO.ativo) await semearBanco();
   else marcarSincronia("Só neste navegador", "s-off");
+}
+
+// grava no banco os registros novos vindos da base
+async function enviarNovos(associacoes, eventos) {
+  if (!BANCO.ativo || (!associacoes.length && !eventos.length)) return;
+  try {
+    await fetch(API, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ associacoes, eventos }),
+    });
+  } catch (e) {
+    marcarSincronia("Falha ao salvar", "s-erro");
+  }
 }
 
 async function init() {
