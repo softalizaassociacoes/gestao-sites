@@ -47,6 +47,11 @@
           <span class="nav-text">Remodelar</span>
           <span class="nav-count" id="count-remodela">0</span>
         </button>
+        <button class="nav-item" data-tab="carteira" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>
+          <span class="nav-text">Associações</span>
+          <span class="nav-count" id="count-carteira">0</span>
+        </button>
       </nav>
 
       <div class="rail-foot">
@@ -63,7 +68,7 @@
         <img class="topbar-mobile-brand" src="logo.svg" alt="Softaliza" />
         <div class="topbar-text">
           <h1 class="page-title" id="page-title">Sites</h1>
-          <p class="page-sub" id="page-sub">Todas as associações, com e sem site conosco.</p>
+          <p class="page-sub" id="page-sub">As associações cujo site é conosco, com tipo e endereço de cada um.</p>
         </div>
         <div class="topbar-actions">
           <button class="icon-btn" id="btn-export" type="button" title="Exportar visão atual em CSV" aria-label="Exportar CSV">
@@ -121,7 +126,6 @@
                     <th class="sortable num" data-sort="mrr">MRR <span class="arrow"></span></th>
                     <th class="sortable" data-sort="siteAtual">Site atual <span class="arrow"></span></th>
                     <th>Endereço</th>
-                    <th>Site conosco</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -226,6 +230,53 @@
                   </tr>
                 </thead>
                 <tbody id="remodela-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================================ associações -->
+        <section id="panel-carteira" class="panel">
+          <div class="metrics" id="carteira-metrics"></div>
+          <div class="comp-grid" id="carteira-composition"></div>
+
+          <div class="filters">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="carteira-search" placeholder="Buscar por sigla ou nome…" autocomplete="off" />
+              <kbd>/</kbd>
+            </div>
+            <div class="chips" id="carteira-chips-conosco" role="group" aria-label="Filtrar por site conosco">
+              <button class="chip on" data-value="" type="button">Todas</button>
+              <button class="chip" data-value="sim" type="button"><span class="chip-dot d-ok"></span>Conosco</button>
+              <button class="chip" data-value="nao" type="button"><span class="chip-dot d-off"></span>Sem site conosco</button>
+            </div>
+            <div class="chips" id="carteira-chips-saude" role="group" aria-label="Filtrar por saúde">
+              <button class="chip on" data-value="" type="button">Toda saúde</button>
+              <button class="chip" data-value="saudavel" type="button"><span class="chip-dot d-ok"></span>Saudável</button>
+              <button class="chip" data-value="atencao" type="button"><span class="chip-dot d-warn"></span>Atenção</button>
+              <button class="chip" data-value="risco" type="button"><span class="chip-dot d-risk"></span>Risco</button>
+              <button class="chip" data-value="cancelado" type="button"><span class="chip-dot d-off"></span>Cancelado</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Associações</h2>
+              <span class="count" id="carteira-count"></span>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="sortable" data-sort="sigla">Associação <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="saude">Saúde <span class="arrow"></span></th>
+                    <th class="sortable num" data-sort="mrr">MRR <span class="arrow"></span></th>
+                    <th>Site conosco</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="carteira-table-body"></tbody>
               </table>
             </div>
           </div>

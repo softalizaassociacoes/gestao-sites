@@ -162,20 +162,26 @@ const STATE = {
   assoc: { q: "", saude: "", site: "", sort: { col: "sigla", dir: "asc" } },
   evento: { q: "", status: "", site: "", sort: { col: "nome", dir: "asc" } },
   remodela: { q: "", nv: "", origem: "" },
+  carteira: { q: "", conosco: "", saude: "", sort: { col: "sigla", dir: "asc" } },
 };
 
-const VIEW = { assoc: [], evento: [], remodela: [] };
+const VIEW = { assoc: [], evento: [], remodela: [], carteira: [] };
 
 const PAGES = {
   assoc: {
     title: "Sites",
-    sub: "Todas as associações, com e sem site conosco.",
+    sub: "As associações cujo site é conosco, com tipo e endereço de cada um.",
     add: "Nova associação",
   },
   evento: {
     title: "Sites de eventos",
     sub: "Congressos e eventos, com site próprio ou ainda no WordPress padrão.",
     add: "Novo evento",
+  },
+  carteira: {
+    title: "Associações",
+    sub: "Todo o roster do SoftaHub — quais têm site conosco e quais não.",
+    add: "Nova associação",
   },
   remodela: {
     title: "Remodelar",
@@ -442,6 +448,15 @@ const ADD_FORMS = {
       return { message: "Evento adicionado." };
     },
   },
+  carteira: {
+    title: "Nova associação",
+    sub: "Entra no roster e é gravada no banco.",
+    fields: [
+      { name: "sigla", label: "Sigla", ph: "ex.: ABC", required: true },
+      { name: "nome", label: "Nome completo", ph: "Opcional" },
+    ],
+    submit: (v) => criarAssociacao(v, false),
+  },
   remodela: {
     title: "Adicionar à remodelação",
     sub: "Marca a associação como site conosco. Se a sigla já existir, ela é reaproveitada.",
@@ -485,6 +500,7 @@ function criarAssociacao(v, comoSite) {
 
   renderAssoc();
   renderRemodela();
+  renderCarteira();
   return { message: comoSite ? `"${v.sigla}" entrou na aba Remodelar.` : `"${v.sigla}" adicionada.` };
 }
 
@@ -612,7 +628,7 @@ function renderAssocMetrics(list) {
 function renderAssocTable(list) {
   const tbody = document.getElementById("assoc-table-body");
   if (!list.length) {
-    tbody.innerHTML = emptyRow(7, "Nada por aqui", "Nenhuma associação bate com esses filtros.");
+    tbody.innerHTML = emptyRow(6, "Nada por aqui", "Nenhum site bate com esses filtros. Marque <strong>Site conosco</strong> na aba Associações.");
     return;
   }
 
@@ -633,7 +649,6 @@ function renderAssocTable(list) {
         <td class="num" data-l="MRR">${a.mrr != null ? moeda(a.mrr) : '<span class="muted">—</span>'}</td>
         <td data-l="Site atual">${selectField("a-tipo", k, a.siteAtual, SITE_ATUAL_OPTIONS)}</td>
         <td data-l="Endereço">${linkCell("a-endereco", k, a.endereco)}</td>
-        <td class="center" data-l="Site conosco">${switchField("a-conosco", k, a.siteConosco)}</td>
         <td class="actions" data-l="">
           <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
         </td>
@@ -645,7 +660,7 @@ function renderAssocTable(list) {
 function renderAssoc() {
   const s = STATE.assoc;
   const filtered = ASSOCIACOES.filter((a) => {
-    if (a.removido) return false;
+    if (a.removido || !a.siteConosco) return false;
     if (s.q && !`${a.sigla} ${a.nome || ""}`.toLowerCase().includes(s.q)) return false;
     if (s.saude && a.saude !== s.saude) return false;
     if (s.site && a.siteAtual !== s.site) return false;
@@ -659,7 +674,7 @@ function renderAssoc() {
   renderAssocTable(sorted);
   syncTableFit();
 
-  const totalAtivas = ASSOCIACOES.filter((a) => !a.removido).length;
+  const totalAtivas = ASSOCIACOES.filter((a) => !a.removido && a.siteConosco).length;
   document.getElementById("assoc-count").textContent =
     sorted.length === totalAtivas ? `${totalAtivas} no total` : `${sorted.length} de ${totalAtivas}`;
   renderNavCounts();
@@ -716,6 +731,143 @@ async function handleAssocClick(ev) {
     if (!ok) return;
     a.removido = true;
     salvarAssoc(a);
+    renderAssoc();
+    renderRemodela();
+    toast(`"${a.sigla}" excluída.`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Aba: Associações (roster completo do SoftaHub)
+// ---------------------------------------------------------------------------
+
+function renderCarteiraMetrics(list) {
+  const total = list.length;
+  const conosco = list.filter((a) => a.siteConosco).length;
+  const saudavel = list.filter((a) => a.saude === "saudavel").length;
+  const atencao = list.filter((a) => a.saude === "atencao").length;
+  const risco = list.filter((a) => a.saude === "risco").length;
+  const cancelado = list.filter((a) => a.saude === "cancelado").length;
+  const semDado = total - saudavel - atencao - risco - cancelado;
+  const mrr = list.reduce((s, a) => s + (a.mrr || 0), 0);
+  const mrrConosco = list.filter((a) => a.siteConosco).reduce((s, a) => s + (a.mrr || 0), 0);
+
+  document.getElementById("carteira-metrics").innerHTML = metricsHtml([
+    { label: "Associações", value: total, note: `${semDado} sem dado de saúde` },
+    { label: "Site conosco", value: conosco, dot: "d-accent", note: `${pct(conosco, total)}% da carteira` },
+    { label: "Sem site conosco", value: total - conosco, dot: "d-off", note: "Oportunidade de migração" },
+    { label: "MRR conosco", value: moeda(mrrConosco), money: true, note: `de ${moeda(mrr)} na carteira` },
+  ]);
+
+  document.getElementById("carteira-composition").innerHTML = compositionHtml("Saúde da carteira", [
+    { cls: "s-ok", label: "Saudável", count: saudavel },
+    { cls: "s-warn", label: "Atenção", count: atencao },
+    { cls: "s-risk", label: "Risco", count: risco },
+    { cls: "s-off", label: "Cancelado", count: cancelado },
+  ]);
+}
+
+function renderCarteiraTable(list) {
+  const tbody = document.getElementById("carteira-table-body");
+  if (!list.length) {
+    tbody.innerHTML = emptyRow(5, "Nada por aqui", "Nenhuma associação bate com esses filtros.");
+    return;
+  }
+
+  tbody.innerHTML = list
+    .map((a) => {
+      const k = `data-key="${esc(a.chave)}"`;
+      return `<tr>
+        <td class="ident-td" data-l="Associação">
+          <div class="ident">
+            ${avatar(a.sigla)}
+            <div class="ident-fields">
+              <input class="f f-strong c-sigla" type="text" ${k} value="${esc(a.sigla)}" placeholder="Sigla" />
+              <input class="f f-sub c-nome" type="text" ${k} value="${esc(a.nome)}" placeholder="Nome completo" />
+            </div>
+          </div>
+        </td>
+        <td data-l="Saúde">${saudeBadge(a.saude)}</td>
+        <td class="num" data-l="MRR">${a.mrr != null ? moeda(a.mrr) : '<span class="muted">—</span>'}</td>
+        <td class="center" data-l="Site conosco">${switchField("c-conosco", k, a.siteConosco)}</td>
+        <td class="actions" data-l="">
+          <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
+        </td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderCarteira() {
+  const s = STATE.carteira;
+  const filtered = ASSOCIACOES.filter((a) => {
+    if (a.removido) return false;
+    if (s.q && !`${a.sigla} ${a.nome || ""}`.toLowerCase().includes(s.q)) return false;
+    if (s.conosco === "sim" && !a.siteConosco) return false;
+    if (s.conosco === "nao" && a.siteConosco) return false;
+    if (s.saude && a.saude !== s.saude) return false;
+    return true;
+  });
+
+  const sorted = sortList(filtered, s.sort, "carteira");
+  VIEW.carteira = sorted;
+
+  renderCarteiraMetrics(sorted);
+  renderCarteiraTable(sorted);
+  syncTableFit();
+
+  const total = ASSOCIACOES.filter((a) => !a.removido).length;
+  document.getElementById("carteira-count").textContent =
+    sorted.length === total ? `${total} no total` : `${sorted.length} de ${total}`;
+  renderNavCounts();
+}
+
+function handleCarteiraEdit(ev) {
+  const el = ev.target;
+  const chave = el.dataset.key;
+  if (!chave) return;
+  const a = ASSOCIACOES.find((x) => x.chave === chave);
+  if (!a) return;
+
+  if (el.classList.contains("c-conosco")) {
+    a.siteConosco = el.checked;
+    salvarAssoc(a);
+    renderCarteira();
+    renderAssoc();
+    renderRemodela();
+    toast(el.checked ? `"${a.sigla}" passou a ter site conosco.` : `"${a.sigla}" deixou de ter site conosco.`, "info");
+    return;
+  }
+
+  if (el.classList.contains("c-sigla")) {
+    a.sigla = el.value;
+    renderCarteira();
+    renderAssoc();
+    renderRemodela();
+  } else if (el.classList.contains("c-nome")) {
+    a.nome = el.value;
+  } else {
+    return;
+  }
+  salvarAssoc(a);
+}
+
+async function handleCarteiraClick(ev) {
+  const btn = ev.target.closest("button[data-act]");
+  if (!btn) return;
+  const a = ASSOCIACOES.find((x) => x.chave === btn.dataset.key);
+  if (!a) return;
+
+  if (btn.dataset.act === "del") {
+    const ok = await confirmDialog(
+      "Excluir associação",
+      `"${a.sigla}" sai do painel inteiro, inclusive das abas Sites e Remodelar.`,
+      "Excluir"
+    );
+    if (!ok) return;
+    a.removido = true;
+    salvarAssoc(a);
+    renderCarteira();
     renderAssoc();
     renderRemodela();
     toast(`"${a.sigla}" excluída.`);
@@ -1112,7 +1264,8 @@ function exportCsv() {
 
   if (STATE.tab === "assoc") {
     name = "associacoes.csv";
-    head = ["Sigla", "Nome", "Saúde", "MRR", "Site atual", "Endereço", "Site conosco"];
+    name = "sites.csv";
+    head = ["Sigla", "Nome", "Saúde", "MRR", "Site atual", "Endereço"];
     rows = VIEW.assoc.map((a) => [
       a.sigla,
       a.nome || "",
@@ -1120,6 +1273,15 @@ function exportCsv() {
       a.mrr != null ? a.mrr : "",
       labelOf(SITE_ATUAL_OPTIONS, a.siteAtual),
       a.endereco || "",
+    ]);
+  } else if (STATE.tab === "carteira") {
+    name = "associacoes.csv";
+    head = ["Sigla", "Nome", "Saúde", "MRR", "Site conosco"];
+    rows = VIEW.carteira.map((a) => [
+      a.sigla,
+      a.nome || "",
+      (SAUDE_META[a.saude] || {}).label || "",
+      a.mrr != null ? a.mrr : "",
       a.siteConosco ? "sim" : "não",
     ]);
   } else if (STATE.tab === "evento") {
@@ -1163,9 +1325,10 @@ function exportCsv() {
 // ---------------------------------------------------------------------------
 
 function renderNavCounts() {
-  document.getElementById("count-assoc").textContent = ASSOCIACOES.filter((a) => !a.removido).length;
+  document.getElementById("count-assoc").textContent = ASSOCIACOES.filter((a) => !a.removido && a.siteConosco).length;
   document.getElementById("count-evento").textContent = EVENTOS.filter((e) => !e.removido).length;
   document.getElementById("count-remodela").textContent = getSites().length;
+  document.getElementById("count-carteira").textContent = ASSOCIACOES.filter((a) => !a.removido).length;
 }
 
 function setTab(tab) {
@@ -1185,6 +1348,7 @@ function setTab(tab) {
 
   if (tab === "assoc") renderAssoc();
   else if (tab === "evento") renderEvento();
+  else if (tab === "carteira") renderCarteira();
   else renderRemodela();
 
   // medir o encaixe só faz sentido com o painel já visível
@@ -1376,6 +1540,24 @@ async function init() {
     renderRemodela();
   });
 
+  document.getElementById("carteira-search").addEventListener("input", (e) => {
+    STATE.carteira.q = e.target.value.trim().toLowerCase();
+    renderCarteira();
+  });
+  initChips("carteira-chips-conosco", (v) => {
+    STATE.carteira.conosco = v;
+    renderCarteira();
+  });
+  initChips("carteira-chips-saude", (v) => {
+    STATE.carteira.saude = v;
+    renderCarteira();
+  });
+
+  const carteiraBody = document.getElementById("carteira-table-body");
+  carteiraBody.addEventListener("change", handleCarteiraEdit);
+  carteiraBody.addEventListener("click", handleCarteiraClick);
+
+  initSort("panel-carteira", "carteira", renderCarteira);
   initSort("panel-assoc", "assoc", renderAssoc);
   initSort("panel-evento", "evento", renderEvento);
 
@@ -1398,6 +1580,7 @@ async function init() {
   renderAssoc();
   renderEvento();
   renderRemodela();
+  renderCarteira();
 
   let saved = null;
   try {
