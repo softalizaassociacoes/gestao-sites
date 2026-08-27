@@ -856,7 +856,7 @@ select.f {
 select.f:hover, select.f:focus { background-color: var(--surface); }
 
 /* link com botões de ação */
-.linkcell { display: flex; align-items: center; gap: 2px; min-width: 146px; }
+.linkcell { display: flex; align-items: center; gap: 2px; min-width: 138px; }
 .linkcell .f { flex: 1; min-width: 0; }
 
 .mini {
