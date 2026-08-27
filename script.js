@@ -16,6 +16,7 @@ const VERCEL_ASSOC_N = buildNormMap(VERCEL_ASSOC);
 const LOCAL_FOLDER_ASSOC_N = buildNormMap(LOCAL_FOLDER_ASSOC);
 const NIVEL_OVERRIDE_N = buildNormMap(NIVEL_OVERRIDE);
 const NOVA_VERSAO_FEITA_N = buildNormMap(typeof NOVA_VERSAO_FEITA !== "undefined" ? NOVA_VERSAO_FEITA : {});
+const SITE_EXTRA_N = buildNormMap(typeof SITE_EXTRA !== "undefined" ? SITE_EXTRA : {});
 
 const SITE_INVENTORY_BY_SIGLA = {};
 SITE_INVENTORY.forEach((row) => {
@@ -240,7 +241,8 @@ function buildAssociacoes() {
     const institucional = inventoryRows.find((r) => !r.evento) || null;
 
     const defaultSiteAtual = vercel ? (nivel === "B" || nivel === "C" ? "hotsite" : "personalizado") : "wordpress";
-    const defaultLink = (vercel && vercel.dominio) || (institucional && institucional.site) || "";
+    const defaultLink =
+      (vercel && vercel.dominio) || (institucional && institucional.site) || SITE_EXTRA_N[key] || "";
 
     const saved = OVERRIDES[a.sigla] || {};
     const feitaSeed = NOVA_VERSAO_FEITA_N[key];

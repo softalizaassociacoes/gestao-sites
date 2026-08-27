@@ -401,3 +401,16 @@ const NOVA_VERSAO_FEITA = {
   ABMEN: "",
   ABEAD: "",
 };
+
+// --- Endereços informados manualmente -------------------------------------
+// Associações que existem no CS Hub mas não tinham site no inventário nem no
+// Vercel. Entra como endereço padrão, e com isso elas passam a contar como
+// "site conosco". Edição salva no painel continua vencendo.
+const SITE_EXTRA = {
+  Abeneuro: "https://abeneuro.softaliza.com.br/",
+  SBEnQ: "https://sbenq.softaliza.com.br/",
+  ABEPEEX: "https://abepeex.softaliza.com.br/",
+  ABRAHOF: "https://abrahof.softaliza.com.br/",
+  ABMEVEC: "https://abmevec.softaliza.com.br/",
+  "SBI-ICT": "https://sbi.softaliza.com.br/",
+};
