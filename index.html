@@ -43,8 +43,8 @@
           <span class="nav-count" id="count-evento">0</span>
         </button>
         <button class="nav-item" data-tab="remodela" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.9 2.9M16.2 16.2l2.9 2.9M2 12h4M18 12h4M4.9 19.1l2.9-2.9M16.2 7.8l2.9-2.9"/></svg>
-          <span class="nav-text">Remodelação</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>
+          <span class="nav-text">Sites</span>
           <span class="nav-count" id="count-remodela">0</span>
         </button>
       </nav>
@@ -52,7 +52,7 @@
       <div class="rail-foot">
         <div class="rail-note">
           <strong>Fontes:</strong> CS Hub + inventário de sites, em <code>data.js</code>.
-          Suas edições ficam salvas neste navegador.
+          <span class="sync-status s-off" id="sync-status">Verificando…</span>
         </div>
       </div>
     </aside>
@@ -121,7 +121,7 @@
                     <th class="sortable num" data-sort="mrr">MRR <span class="arrow"></span></th>
                     <th class="sortable" data-sort="siteAtual">Site atual <span class="arrow"></span></th>
                     <th>Endereço</th>
-                    <th>Remodelar</th>
+                    <th>Site conosco</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -195,16 +195,17 @@
               <button class="chip" data-value="feita" type="button"><span class="chip-dot d-ok"></span>Feitas</button>
               <button class="chip" data-value="nao" type="button"><span class="chip-dot d-risk"></span>Não</button>
             </div>
-            <div class="chips" id="remodela-chips-origem" role="group" aria-label="Filtrar por origem">
-              <button class="chip on" data-value="" type="button">Toda a fila</button>
-              <button class="chip" data-value="wordpress" type="button">Em WordPress</button>
-              <button class="chip" data-value="manual" type="button">Marcadas à mão</button>
+            <div class="chips" id="remodela-chips-origem" role="group" aria-label="Filtrar por tipo de site">
+              <button class="chip on" data-value="" type="button">Todo site</button>
+              <button class="chip" data-value="wordpress" type="button">WordPress</button>
+              <button class="chip" data-value="personalizado" type="button">Personalizado</button>
+              <button class="chip" data-value="hotsite" type="button">Hotsite</button>
             </div>
           </div>
 
           <div class="card">
             <div class="card-head">
-              <h2>Fila de remodelação</h2>
+              <h2>Sites conosco</h2>
               <span class="count" id="remodela-count"></span>
               <span class="spacer"></span>
               <div class="progress-inline" id="remodela-progress"></div>
@@ -215,8 +216,10 @@
                   <tr>
                     <th>Prio.</th>
                     <th>Associação</th>
+                    <th>Saúde</th>
                     <th class="num">MRR</th>
                     <th>Site atual</th>
+                    <th>Endereço</th>
                     <th>Nova versão</th>
                     <th>Endereço novo</th>
                     <th></th>

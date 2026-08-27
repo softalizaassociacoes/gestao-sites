@@ -321,6 +321,26 @@ svg { display: block; flex-shrink: 0; }
   color: var(--text-3);
 }
 .rail-note strong { color: var(--text-2); font-weight: 620; }
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.sync-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.sync-status.s-ok { color: var(--ok); }
+.sync-status.s-sync { color: var(--accent); }
+.sync-status.s-erro { color: var(--risk); }
+.sync-status.s-off { color: var(--text-3); }
+
 .rail-note code {
   font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
   font-size: 11px;
@@ -709,11 +729,10 @@ svg { display: block; flex-shrink: 0; }
 
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-/* onde a tabela cabe inteira, soltamos o overflow para o cabeçalho
-   poder grudar sob a barra do topo durante a rolagem da página */
-@media (min-width: 1300px) {
-  .table-scroll { overflow: visible; }
-}
+/* Quando a tabela cabe inteira, soltamos o overflow para o thead poder grudar
+   sob a barra do topo. A classe vem do JS, que mede de verdade: um ponto de
+   corte fixo erraria, já que cada aba tem um número diferente de colunas. */
+.table-scroll.fits { overflow: visible; }
 
 table {
   width: 100%;
@@ -773,7 +792,7 @@ td.center { text-align: center; }
 
 /* célula de identidade */
 .ident { display: flex; align-items: center; gap: 11px; min-width: 0; }
-.ident-fields { display: flex; flex-direction: column; gap: 1px; min-width: 170px; flex: 1; }
+.ident-fields { display: flex; flex-direction: column; gap: 1px; min-width: 158px; flex: 1; }
 
 .avatar {
   width: 34px;
@@ -837,7 +856,7 @@ select.f {
 select.f:hover, select.f:focus { background-color: var(--surface); }
 
 /* link com botões de ação */
-.linkcell { display: flex; align-items: center; gap: 2px; min-width: 168px; }
+.linkcell { display: flex; align-items: center; gap: 2px; min-width: 146px; }
 .linkcell .f { flex: 1; min-width: 0; }
 
 .mini {
@@ -951,7 +970,7 @@ tbody tr:hover .mini, .mini:focus-visible { opacity: 1; }
 /* ------------------------------------------- estado da nova versão (3 vias) */
 
 select.nv-select {
-  min-width: 108px;
+  min-width: 100px;
   padding: 5px 24px 5px 10px;
   border-radius: 999px;
   font-size: 12px;

@@ -27,8 +27,17 @@ SITE_INVENTORY.forEach((row) => {
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 // ---------------------------------------------------------------------------
-// Persistência (localStorage)
+// Persistência
+//
+// O localStorage continua sendo a fonte que o painel lê, por ser síncrono. Em
+// cima dele há a sincronia com o Supabase (via /api/estado): ao abrir, o que
+// está na nuvem substitui o local; a cada gravação, o estado inteiro sobe de
+// volta. Assim trocar de navegador ou limpar o cache não perde nada.
 // ---------------------------------------------------------------------------
+
+const API_ESTADO = "/api/estado";
+
+const SYNC = { ativo: false, enviando: false, pendente: false, timer: null };
 
 const OVERRIDES_KEY = "gestaoSitesOverrides";
 
@@ -44,9 +53,10 @@ function saveOverride(sigla, patch) {
   const all = loadOverrides();
   all[sigla] = { ...all[sigla], ...patch };
   localStorage.setItem(OVERRIDES_KEY, JSON.stringify(all));
+  agendarSincronia();
 }
 
-const OVERRIDES = loadOverrides();
+let OVERRIDES = loadOverrides();
 
 const EVENT_OVERRIDES_KEY = "gestaoSitesEventOverrides";
 
@@ -62,9 +72,10 @@ function saveEventOverride(id, patch) {
   const all = loadEventOverrides();
   all[id] = { ...all[id], ...patch };
   localStorage.setItem(EVENT_OVERRIDES_KEY, JSON.stringify(all));
+  agendarSincronia();
 }
 
-const EVENT_OVERRIDES = loadEventOverrides();
+let EVENT_OVERRIDES = loadEventOverrides();
 
 const MANUAL_ASSOC_KEY = "gestaoSitesManualAssoc";
 const MANUAL_EVENT_KEY = "gestaoSitesManualEventos";
@@ -79,6 +90,7 @@ function loadManualAssoc() {
 
 function saveManualAssoc(list) {
   localStorage.setItem(MANUAL_ASSOC_KEY, JSON.stringify(list));
+  agendarSincronia();
 }
 
 function loadManualEventos() {
@@ -91,6 +103,7 @@ function loadManualEventos() {
 
 function saveManualEventos(list) {
   localStorage.setItem(MANUAL_EVENT_KEY, JSON.stringify(list));
+  agendarSincronia();
 }
 
 function saveAssocField(key, patch) {
@@ -121,6 +134,99 @@ function saveEventoField(id, patch) {
   }
 }
 
+// --- sincronia com o Supabase --------------------------------------------
+
+function estadoLocal() {
+  return {
+    overrides: loadOverrides(),
+    eventOverrides: loadEventOverrides(),
+    manualAssoc: loadManualAssoc(),
+    manualEventos: loadManualEventos(),
+  };
+}
+
+function marcarSincronia(texto, classe) {
+  const el = document.getElementById("sync-status");
+  if (!el) return;
+  el.textContent = texto;
+  el.className = `sync-status ${classe}`;
+}
+
+async function enviarEstado() {
+  if (!SYNC.ativo) return;
+  if (SYNC.enviando) {
+    SYNC.pendente = true;
+    return;
+  }
+  SYNC.enviando = true;
+  marcarSincronia("Salvando…", "s-sync");
+  try {
+    const r = await fetch(API_ESTADO, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dados: estadoLocal() }),
+    });
+    marcarSincronia(r.ok ? "Salvo na nuvem" : "Falha ao salvar", r.ok ? "s-ok" : "s-erro");
+  } catch (e) {
+    marcarSincronia("Sem conexão — salvo só aqui", "s-erro");
+  } finally {
+    SYNC.enviando = false;
+    if (SYNC.pendente) {
+      SYNC.pendente = false;
+      enviarEstado();
+    }
+  }
+}
+
+// agrupa rajadas de edição num envio só
+function agendarSincronia() {
+  if (!SYNC.ativo) return;
+  clearTimeout(SYNC.timer);
+  SYNC.timer = setTimeout(enviarEstado, 1200);
+}
+
+async function carregarEstadoRemoto() {
+  let resposta;
+  try {
+    resposta = await fetch(API_ESTADO, { headers: { Accept: "application/json" } });
+  } catch (e) {
+    marcarSincronia("Sem conexão — só neste navegador", "s-erro");
+    return;
+  }
+
+  if (!resposta.ok) {
+    // 503 = variáveis não configuradas; o painel segue só com localStorage
+    marcarSincronia("Só neste navegador", "s-off");
+    return;
+  }
+
+  let corpo;
+  try {
+    corpo = await resposta.json();
+  } catch (e) {
+    marcarSincronia("Só neste navegador", "s-off");
+    return;
+  }
+
+  SYNC.ativo = true;
+  const dados = corpo && corpo.dados;
+  const temAlgo = dados && Object.keys(dados).length && Object.values(dados).some((v) => v && Object.keys(v).length);
+
+  if (temAlgo) {
+    if (dados.overrides) localStorage.setItem(OVERRIDES_KEY, JSON.stringify(dados.overrides));
+    if (dados.eventOverrides) localStorage.setItem(EVENT_OVERRIDES_KEY, JSON.stringify(dados.eventOverrides));
+    if (dados.manualAssoc) localStorage.setItem(MANUAL_ASSOC_KEY, JSON.stringify(dados.manualAssoc));
+    if (dados.manualEventos) localStorage.setItem(MANUAL_EVENT_KEY, JSON.stringify(dados.manualEventos));
+    OVERRIDES = loadOverrides();
+    EVENT_OVERRIDES = loadEventOverrides();
+    marcarSincronia("Salvo na nuvem", "s-ok");
+  } else {
+    // nuvem vazia: sobe o que já existe aqui, para não começar do zero
+    marcarSincronia("Salvo na nuvem", "s-ok");
+    enviarEstado();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Modelo
 // ---------------------------------------------------------------------------
@@ -148,8 +254,10 @@ function buildAssociacoes() {
       siteAtual: saved.siteAtual || defaultSiteAtual,
       link: saved.link != null ? saved.link : defaultLink,
       removed: !!saved.removed,
-      remodelacao: !!saved.remodelacao,
-      foraDaFila: !!saved.foraDaFila,
+      // "site conosco" nasce marcado onde há endereço registrado — única
+      // evidência nos dados de que o site é nosso. Quem já teve nova versão
+      // publicada entra junto, mesmo sem endereço antigo no cadastro.
+      siteConosco: saved.siteConosco != null ? !!saved.siteConosco : !!defaultLink || feitaSeed != null,
       // ordem de precedência: edição salva > booleano antigo > semente de
       // novas versões publicadas (data.js) > pendente
       novaVersaoStatus:
@@ -164,7 +272,7 @@ function buildAssociacoes() {
   const manual = loadManualAssoc().map((m) => ({
     ...m,
     manual: true,
-    foraDaFila: !!m.foraDaFila,
+    siteConosco: m.siteConosco != null ? !!m.siteConosco : true,
     novaVersaoStatus: m.novaVersaoStatus || (m.novaVersao ? "feita" : "pendente"),
   }));
   return [...fromCrm, ...manual];
@@ -181,8 +289,7 @@ function addManualAssoc(sigla, nome) {
     siteAtual: "wordpress",
     link: "",
     removed: false,
-    remodelacao: false,
-    foraDaFila: false,
+    siteConosco: true,
     novaVersaoStatus: "pendente",
     novaVersaoLink: "",
   };
@@ -290,8 +397,9 @@ function addManualEvento(nome, sigla) {
   EVENTOS.push({ ...record, manual: true });
 }
 
-const ASSOCIACOES = buildAssociacoes();
-const EVENTOS = buildEventos();
+// preenchidos no init(), depois de tentar puxar o estado da nuvem
+let ASSOCIACOES = [];
+let EVENTOS = [];
 
 // ---------------------------------------------------------------------------
 // Estado da interface
@@ -322,9 +430,9 @@ const PAGES = {
     add: "Novo evento",
   },
   remodela: {
-    title: "Fila de remodelação",
-    sub: "Todo site ainda em WordPress entra aqui, ordenado por MRR — quem paga mais primeiro.",
-    add: "Adicionar à fila",
+    title: "Sites",
+    sub: "As associações cujo site é conosco, ordenadas por MRR — quem paga mais primeiro.",
+    add: "Adicionar site",
   },
 };
 
@@ -554,8 +662,8 @@ const ADD_FORMS = {
     },
   },
   remodela: {
-    title: "Adicionar à fila",
-    sub: "Se a sigla já existir no inventário, ela é reaproveitada.",
+    title: "Adicionar site",
+    sub: "Marca a associação como site conosco. Se a sigla já existir, ela é reaproveitada.",
     fields: [
       { name: "sigla", label: "Sigla", ph: "ex.: ABC", required: true },
       { name: "nome", label: "Nome completo", ph: "Opcional" },
@@ -564,8 +672,8 @@ const ADD_FORMS = {
       const existing = ASSOCIACOES.find((a) => norm(a.sigla) === norm(v.sigla));
       if (existing) {
         existing.removed = false;
-        existing.remodelacao = true;
-        const patch = { removed: false, remodelacao: true };
+        existing.siteConosco = true;
+        const patch = { removed: false, siteConosco: true };
         if (v.nome) {
           existing.nome = v.nome;
           patch.nome = v.nome;
@@ -574,12 +682,12 @@ const ADD_FORMS = {
       } else {
         addManualAssoc(v.sigla, v.nome);
         const a = ASSOCIACOES[ASSOCIACOES.length - 1];
-        a.remodelacao = true;
-        saveAssocField(a.key, { remodelacao: true });
+        a.siteConosco = true;
+        saveAssocField(a.key, { siteConosco: true });
       }
       renderRemodela();
       renderAssoc();
-      return { message: `"${v.sigla}" entrou na fila.` };
+      return { message: `"${v.sigla}" entrou na aba Sites.` };
     },
   },
 };
@@ -686,7 +794,7 @@ function renderAssocMetrics(list) {
     { label: "Associações", value: total, note: `${semDado} sem dado de saúde` },
     { label: "MRR somado", value: currency.format(mrr), money: true, note: "Receita recorrente do recorte" },
     { label: "Fora do WordPress", value: migrados, dot: "d-accent", note: `${pct(migrados, total)}% já migrado` },
-    { label: "Na fila", value: naFila, dot: "d-warn", note: "Marcadas para remodelar" },
+    { label: "Sites conosco", value: naFila, dot: "d-warn", note: "Hospedados por nós" },
   ]);
 
   document.getElementById("assoc-composition").innerHTML =
@@ -731,7 +839,7 @@ function renderAssocTable(list) {
         <td class="num" data-l="MRR">${a.mrr != null ? currency.format(a.mrr) : '<span class="muted">—</span>'}</td>
         <td data-l="Site atual">${selectField("site-select", k, a.siteAtual, SITE_ATUAL_OPTIONS)}</td>
         <td data-l="Endereço">${linkCell("site-link", k, a.link)}</td>
-        <td class="center" data-l="Remodelar">${switchField("assoc-remodela", k, isNaFila(a), "")}</td>
+        <td class="center" data-l="Site conosco">${switchField("assoc-site-conosco", k, a.siteConosco, "")}</td>
         <td class="actions" data-l="">
           <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
         </td>
@@ -755,6 +863,7 @@ function renderAssoc() {
 
   renderAssocMetrics(sorted);
   renderAssocTable(sorted);
+  syncTableFit();
 
   const totalAtivas = ASSOCIACOES.filter((a) => !a.removed).length;
   document.getElementById("assoc-count").textContent =
@@ -784,14 +893,12 @@ function handleAssocEdit(ev) {
   } else if (el.classList.contains("assoc-nome")) {
     assoc.nome = el.value;
     saveAssocField(key, { nome: el.value });
-  } else if (el.classList.contains("assoc-remodela")) {
-    // desmarcar precisa gravar a dispensa, senão um site WordPress reentraria
-    assoc.remodelacao = el.checked;
-    assoc.foraDaFila = !el.checked;
-    saveAssocField(key, { remodelacao: el.checked, foraDaFila: !el.checked });
+  } else if (el.classList.contains("assoc-site-conosco")) {
+    assoc.siteConosco = el.checked;
+    saveAssocField(key, { siteConosco: el.checked });
     renderAssoc();
     renderRemodela();
-    toast(el.checked ? `"${assoc.sigla}" entrou na fila de remodelação.` : `"${assoc.sigla}" saiu da fila.`, "info");
+    toast(el.checked ? `"${assoc.sigla}" entrou na aba Sites.` : `"${assoc.sigla}" saiu da aba Sites.`, "info");
     return;
   }
   toastSaved();
@@ -904,6 +1011,7 @@ function renderEvento() {
 
   renderEventoMetrics(sorted);
   renderEventoTable(sorted);
+  syncTableFit();
 
   const totalAtivos = EVENTOS.filter((e) => !e.removed).length;
   document.getElementById("evento-count").textContent =
@@ -972,11 +1080,10 @@ async function handleEventoClick(ev) {
 // Aba: Fila de remodelação
 // ---------------------------------------------------------------------------
 
-// A fila é o backlog da migração: entra automaticamente todo site ainda em
-// WordPress, mais o que for marcado à mão. "foraDaFila" é a dispensa explícita,
-// necessária porque sem ela um site WordPress voltaria sozinho ao ser removido.
+// A aba Sites lista o que é hospedado por nós, marcado pela chave "Site
+// conosco" em Associações. A prioridade continua sendo o MRR.
 function isNaFila(a) {
-  return !a.removed && !a.foraDaFila && (a.remodelacao || a.siteAtual === "wordpress");
+  return !a.removed && a.siteConosco;
 }
 
 function getRemodelaQueue() {
@@ -1017,11 +1124,13 @@ function renderRemodelaMetrics(queue) {
     .filter((a) => a.novaVersaoStatus === "pendente")
     .reduce((s, a) => s + (a.mrr || 0), 0);
 
+  const wordpress = queue.filter((a) => a.siteAtual === "wordpress").length;
+
   document.getElementById("remodela-metrics").innerHTML = metricsHtml([
-    { label: "Na fila", value: total, dot: "d-accent", note: nao ? `${nao} marcada(s) como “Não”` : "Marcadas para remodelar" },
+    { label: "Sites conosco", value: total, dot: "d-accent", note: `${total - wordpress} já fora do WordPress` },
     { label: "Novas versões prontas", value: feitas, dot: "d-ok", note: `${pct(feitas, previstas)}% do que está previsto` },
-    { label: "Pendentes", value: pendentes, dot: "d-warn", note: "Ainda no modelo antigo" },
-    { label: "MRR represado", value: currency.format(mrrPendente), money: true, note: `de ${currency.format(mrr)} na fila` },
+    { label: "Pendentes", value: pendentes, dot: "d-warn", note: nao ? `${nao} marcada(s) como “Não”` : "Ainda no modelo antigo" },
+    { label: "MRR represado", value: currency.format(mrrPendente), money: true, note: `de ${currency.format(mrr)} no total` },
   ]);
 
   const prog = document.getElementById("remodela-progress");
@@ -1035,9 +1144,9 @@ function renderRemodelaTable(list) {
   const tbody = document.getElementById("remodela-table-body");
   if (list.length === 0) {
     tbody.innerHTML = emptyRow(
-      7,
-      "Fila vazia",
-      "Nenhum site em WordPress bate com esses filtros. Limpe a busca, ou use “Adicionar à fila” para incluir algo à mão."
+      9,
+      "Nenhum site aqui",
+      "Nenhum site bate com esses filtros. Marque a chave <strong>Site conosco</strong> em Associações, ou use “Adicionar site”."
     );
     return;
   }
@@ -1057,13 +1166,10 @@ function renderRemodelaTable(list) {
             </div>
           </div>
         </td>
+        <td data-l="Saúde">${healthBadge(a.health)}</td>
         <td class="num" data-l="MRR"><input class="f f-num rmd-mrr-inp" type="text" inputmode="numeric" ${k} value="${a.mrr != null ? a.mrr : ""}" placeholder="0" /></td>
-        <td data-l="Site atual">
-          <div class="stack">
-            ${siteTipoBadge(a.siteAtual)}
-            ${linkCell("rmd-site-link", k, a.link)}
-          </div>
-        </td>
+        <td data-l="Site atual">${selectField("rmd-site-select", k, a.siteAtual, SITE_ATUAL_OPTIONS)}</td>
+        <td data-l="Endereço">${linkCell("rmd-site-link", k, a.link)}</td>
         <td data-l="Nova versão">${selectField(
           `nv-select nv-${a.novaVersaoStatus} rmd-nv-select`,
           k,
@@ -1072,7 +1178,7 @@ function renderRemodelaTable(list) {
         )}</td>
         <td data-l="Endereço novo">${linkCell("rmd-nv-link", k, a.novaVersaoLink)}</td>
         <td class="actions" data-l="">
-          <button class="mini danger" type="button" data-act="unqueue" ${k} title="Tirar da fila" aria-label="Tirar da fila">${ICON.trash}</button>
+          <button class="mini danger" type="button" data-act="unqueue" ${k} title="Marcar que o site não é conosco" aria-label="Tirar da lista">${ICON.trash}</button>
         </td>
       </tr>`;
     })
@@ -1091,8 +1197,7 @@ function renderRemodela() {
   const filtered = ordered.filter((a) => {
     if (s.q && !`${a.sigla || ""} ${a.nome || ""}`.toLowerCase().includes(s.q)) return false;
     if (s.nv && a.novaVersaoStatus !== s.nv) return false;
-    if (s.origem === "wordpress" && a.siteAtual !== "wordpress") return false;
-    if (s.origem === "manual" && !a.remodelacao) return false;
+    if (s.origem && a.siteAtual !== s.origem) return false;
     return true;
   });
 
@@ -1100,9 +1205,10 @@ function renderRemodela() {
 
   renderRemodelaMetrics(queue);
   renderRemodelaTable(filtered);
+  syncTableFit();
 
   document.getElementById("remodela-count").textContent =
-    filtered.length === queue.length ? `${queue.length} na fila` : `${filtered.length} de ${queue.length}`;
+    filtered.length === queue.length ? `${queue.length} no total` : `${filtered.length} de ${queue.length}`;
   renderNavCounts();
 }
 
@@ -1121,7 +1227,7 @@ function handleRemodelaEdit(ev) {
     const msg = {
       feita: `Nova versão de "${assoc.sigla}" marcada como feita.`,
       pendente: `"${assoc.sigla}" voltou para pendente.`,
-      nao: `"${assoc.sigla}" marcada como “Não” e foi para o fim da fila.`,
+      nao: `"${assoc.sigla}" marcada como “Não” e foi para o fim da lista.`,
     };
     toast(msg[el.value], "info");
     return;
@@ -1151,6 +1257,11 @@ function handleRemodelaEdit(ev) {
     saveAssocField(key, { link: el.value });
     refreshLinkButtons(el);
     renderAssoc();
+  } else if (el.classList.contains("rmd-site-select")) {
+    assoc.siteAtual = el.value;
+    saveAssocField(key, { siteAtual: el.value });
+    renderRemodela();
+    renderAssoc();
   }
   toastSaved();
 }
@@ -1170,18 +1281,16 @@ async function handleRemodelaClick(ev) {
 
   if (btn.dataset.act === "unqueue") {
     const ok = await confirmDialog(
-      "Tirar da fila",
-      `"${assoc.sigla}" sai da fila e não volta sozinha, mesmo continuando em WordPress. A associação segue no inventário.`,
-      "Tirar da fila"
+      "Tirar da lista de sites",
+      `"${assoc.sigla}" deixa de ser marcada como site conosco e sai desta aba. A associação continua em Associações.`,
+      "Tirar da lista"
     );
     if (!ok) return;
-    // dispensa explícita: sem isso um site WordPress reentraria na fila
-    assoc.remodelacao = false;
-    assoc.foraDaFila = true;
-    saveAssocField(key, { remodelacao: false, foraDaFila: true });
+    assoc.siteConosco = false;
+    saveAssocField(key, { siteConosco: false });
     renderRemodela();
     renderAssoc();
-    toast(`"${assoc.sigla}" saiu da fila.`);
+    toast(`"${assoc.sigla}" saiu da lista de sites.`);
   }
 }
 
@@ -1242,7 +1351,7 @@ function exportCsv() {
 
   if (STATE.tab === "assoc") {
     name = "associacoes.csv";
-    head = ["Sigla", "Nome", "Saúde", "MRR", "Site atual", "Endereço", "Na fila"];
+    head = ["Sigla", "Nome", "Saúde", "MRR", "Site atual", "Endereço", "Site conosco"];
     rows = VIEW.assoc.map((a) => [
       a.sigla,
       a.nome || "",
@@ -1250,7 +1359,7 @@ function exportCsv() {
       a.mrr != null ? a.mrr : "",
       labelOf(SITE_ATUAL_OPTIONS, a.siteAtual),
       a.link || "",
-      a.remodelacao ? "sim" : "não",
+      a.siteConosco ? "sim" : "não",
     ]);
   } else if (STATE.tab === "evento") {
     name = "eventos.csv";
@@ -1265,7 +1374,7 @@ function exportCsv() {
       e.link || "",
     ]);
   } else {
-    name = "fila-remodelacao.csv";
+    name = "sites.csv";
     head = ["Prioridade", "Sigla", "Nome", "MRR", "Site atual", "Nova versão", "Endereço novo"];
     rows = VIEW.remodela.map((a) => [
       a._rank,
@@ -1317,6 +1426,8 @@ function setTab(tab) {
   else if (tab === "evento") renderEvento();
   else renderRemodela();
 
+  // medir o encaixe só faz sentido com o painel já visível
+  syncTableFit();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -1371,6 +1482,18 @@ function initSort(panelId, stateKey, rerender, type) {
   if (first) first.classList.add(STATE[stateKey].sort.dir === "asc" ? "sort-asc" : "sort-desc");
 }
 
+// Só liberamos o overflow (e com ele o thead sticky) na tabela que realmente
+// cabe na largura disponível; se não coubesse, a página inteira rolaria na
+// horizontal.
+function syncTableFit() {
+  document.querySelectorAll(".panel.active .table-scroll").forEach((box) => {
+    const table = box.querySelector("table");
+    if (!table) return;
+    box.classList.remove("fits");
+    if (table.scrollWidth <= box.clientWidth + 1) box.classList.add("fits");
+  });
+}
+
 // o cabeçalho da tabela gruda exatamente sob a barra do topo, seja qual for a
 // altura dela (que muda entre desktop e celular)
 function syncTopbarHeight() {
@@ -1381,6 +1504,7 @@ function syncTopbarHeight() {
   apply();
   if (window.ResizeObserver) new ResizeObserver(apply).observe(topbar);
   else window.addEventListener("resize", apply);
+  window.addEventListener("resize", syncTableFit);
 }
 
 function initDialogs() {
@@ -1425,7 +1549,13 @@ function initShortcuts() {
 // Boot
 // ---------------------------------------------------------------------------
 
-function init() {
+async function init() {
+  // puxa a nuvem antes de montar o modelo — o resto do código é síncrono e
+  // lê do localStorage já atualizado
+  await carregarEstadoRemoto();
+  ASSOCIACOES = buildAssociacoes();
+  EVENTOS = buildEventos();
+
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => setTab(btn.dataset.tab));
   });
