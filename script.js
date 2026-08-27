@@ -168,7 +168,7 @@ const VIEW = { assoc: [], evento: [], remodela: [] };
 
 const PAGES = {
   assoc: {
-    title: "Associações",
+    title: "Sites",
     sub: "Todas as associações, com e sem site conosco.",
     add: "Nova associação",
   },
@@ -178,9 +178,9 @@ const PAGES = {
     add: "Novo evento",
   },
   remodela: {
-    title: "Sites",
-    sub: "As associações cujo site é conosco, ordenadas por MRR — quem paga mais primeiro.",
-    add: "Adicionar site",
+    title: "Remodelar",
+    sub: "Os sites conosco, ordenados por MRR — quem paga mais entra primeiro na régua.",
+    add: "Adicionar à remodelação",
   },
 };
 
@@ -258,7 +258,7 @@ function saudeBadge(saude) {
   return `<span class="badge ${meta.cls}"><i></i>${meta.label}</span>`;
 }
 
-// WordPress é a regra na aba Sites; repetir o selo em toda linha não informa
+// WordPress é a regra na aba Remodelar; repetir o selo em toda linha não informa
 // nada, então marcamos só a exceção
 function siteTipoBadge(tipo) {
   const meta = SITE_TIPO_BADGE[tipo];
@@ -443,7 +443,7 @@ const ADD_FORMS = {
     },
   },
   remodela: {
-    title: "Adicionar site",
+    title: "Adicionar à remodelação",
     sub: "Marca a associação como site conosco. Se a sigla já existir, ela é reaproveitada.",
     fields: [
       { name: "sigla", label: "Sigla", ph: "ex.: ABC", required: true },
@@ -485,7 +485,7 @@ function criarAssociacao(v, comoSite) {
 
   renderAssoc();
   renderRemodela();
-  return { message: comoSite ? `"${v.sigla}" entrou na aba Sites.` : `"${v.sigla}" adicionada.` };
+  return { message: comoSite ? `"${v.sigla}" entrou na aba Remodelar.` : `"${v.sigla}" adicionada.` };
 }
 
 function openAddDialog() {
@@ -573,7 +573,7 @@ function sortList(list, sort, tipo) {
 }
 
 // ---------------------------------------------------------------------------
-// Aba: Associações
+// Aba: Sites (todas as associações)
 // ---------------------------------------------------------------------------
 
 function renderAssocMetrics(list) {
@@ -690,7 +690,7 @@ function handleAssocEdit(ev) {
     salvarAssoc(a);
     renderAssoc();
     renderRemodela();
-    toast(el.checked ? `"${a.sigla}" entrou na aba Sites.` : `"${a.sigla}" saiu da aba Sites.`, "info");
+    toast(el.checked ? `"${a.sigla}" entrou na aba Remodelar.` : `"${a.sigla}" saiu da aba Remodelar.`, "info");
     return;
   } else {
     return;
@@ -863,7 +863,7 @@ async function handleEventoClick(ev) {
 }
 
 // ---------------------------------------------------------------------------
-// Aba: Sites
+// Aba: Remodelar (os sites conosco)
 // ---------------------------------------------------------------------------
 
 function naAbaSites(a) {
@@ -913,7 +913,7 @@ function renderRemodelaTable(list) {
     tbody.innerHTML = emptyRow(
       9,
       "Nenhum site aqui",
-      "Nenhum site bate com esses filtros. Marque a chave <strong>Site conosco</strong> em Associações, ou use “Adicionar site”."
+      "Nenhum site bate com esses filtros. Marque a chave <strong>Site conosco</strong> na aba Sites, ou use “Adicionar à remodelação”."
     );
     return;
   }
@@ -945,7 +945,7 @@ function renderRemodelaTable(list) {
         <td data-l="Nova versão">${selectField(`nv-select nv-${a.novaVersao} s-nv`, k, a.novaVersao, NOVA_VERSAO_OPTIONS)}</td>
         <td data-l="Endereço novo">${linkCell("s-endereco-novo", k, a.enderecoNovo)}</td>
         <td class="actions" data-l="">
-          <button class="mini danger" type="button" data-act="unqueue" ${k} title="Marcar que o site não é conosco" aria-label="Tirar da lista">${ICON.trash}</button>
+          <button class="mini danger" type="button" data-act="unqueue" ${k} title="Marcar que o site não é conosco" aria-label="Tirar da remodelação">${ICON.trash}</button>
         </td>
       </tr>`;
     })
@@ -1043,8 +1043,8 @@ async function handleRemodelaClick(ev) {
 
   if (btn.dataset.act === "unqueue") {
     const ok = await confirmDialog(
-      "Tirar da lista de sites",
-      `"${a.sigla}" deixa de ser marcada como site conosco e sai desta aba. A associação continua em Associações.`,
+      "Tirar da remodelação",
+      `"${a.sigla}" deixa de ser marcada como site conosco e sai desta aba. A associação continua na aba Sites.`,
       "Tirar da lista"
     );
     if (!ok) return;
@@ -1052,7 +1052,7 @@ async function handleRemodelaClick(ev) {
     salvarAssoc(a);
     renderRemodela();
     renderAssoc();
-    toast(`"${a.sigla}" saiu da lista de sites.`);
+    toast(`"${a.sigla}" saiu da remodelação.`);
   }
 }
 
