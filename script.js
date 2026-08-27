@@ -15,6 +15,7 @@ function buildNormMap(obj) {
 const VERCEL_ASSOC_N = buildNormMap(VERCEL_ASSOC);
 const LOCAL_FOLDER_ASSOC_N = buildNormMap(LOCAL_FOLDER_ASSOC);
 const NIVEL_OVERRIDE_N = buildNormMap(NIVEL_OVERRIDE);
+const NOVA_VERSAO_FEITA_N = buildNormMap(typeof NOVA_VERSAO_FEITA !== "undefined" ? NOVA_VERSAO_FEITA : {});
 
 const SITE_INVENTORY_BY_SIGLA = {};
 SITE_INVENTORY.forEach((row) => {
@@ -136,6 +137,7 @@ function buildAssociacoes() {
     const defaultLink = (vercel && vercel.dominio) || (institucional && institucional.site) || "";
 
     const saved = OVERRIDES[a.sigla] || {};
+    const feitaSeed = NOVA_VERSAO_FEITA_N[key];
 
     return {
       key: a.sigla,
@@ -148,9 +150,11 @@ function buildAssociacoes() {
       removed: !!saved.removed,
       remodelacao: !!saved.remodelacao,
       foraDaFila: !!saved.foraDaFila,
-      // migra o antigo booleano novaVersao para os três estados
-      novaVersaoStatus: saved.novaVersaoStatus || (saved.novaVersao ? "feita" : "pendente"),
-      novaVersaoLink: saved.novaVersaoLink != null ? saved.novaVersaoLink : "",
+      // ordem de precedência: edição salva > booleano antigo > semente de
+      // novas versões publicadas (data.js) > pendente
+      novaVersaoStatus:
+        saved.novaVersaoStatus || (saved.novaVersao ? "feita" : feitaSeed != null ? "feita" : "pendente"),
+      novaVersaoLink: saved.novaVersaoLink != null ? saved.novaVersaoLink : feitaSeed || "",
       manual: false,
     };
   });

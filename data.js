@@ -373,3 +373,31 @@ const LOCAL_FOLDER_EVENT = {
   "2bd2cb6f": "cppc",
   ca300fd7: "sbeb",
 };
+
+// --- Novas versões já publicadas -----------------------------------------
+// Informado manualmente por Marcos. Vale como padrão da coluna "Nova versão":
+// quem está aqui nasce como "feita" com o endereço ao lado. Uma edição salva
+// no navegador sempre vence este padrão.
+// Entradas com endereço vazio foram confirmadas como prontas, mas o endereço
+// ainda não foi informado.
+const NOVA_VERSAO_FEITA = {
+  ABPsigero: "abpsigero.softaliza.com.br",
+  AFARGS: "afargs.softaliza.com.br",
+  AMPD: "ampd.softaliza.com.br",
+  LATS: "lats.softaliza.com.br",
+  "ABEN-SC": "novo-abensc.softaliza.com.br",
+  SBNR: "sbnr.softaliza.com.br",
+  ABOD: "abod.softaliza.com.br",
+  SBTOX: "sbtox.softaliza.com.br",
+  ABRAPEE: "abrapee.softaliza.com.br",
+  SBMZ: "site-sbmz.softaliza.com.br",
+  ACAT: "acat.softaliza.com.br",
+  ABE: "abe.softaliza.com.br",
+  CPPC: "cppc.softaliza.com.br",
+  ABRAPESP: "abrapesp.softaliza.com.br",
+  APQC: "apqc.softaliza.com.br",
+  AZAB: "azab.softaliza.com.br",
+  SBPH: "",
+  ABMEN: "",
+  ABEAD: "",
+};
