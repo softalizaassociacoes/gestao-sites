@@ -780,7 +780,7 @@ function renderCarteiraMetrics(list) {
 function renderCarteiraTable(list) {
   const tbody = document.getElementById("carteira-table-body");
   if (!list.length) {
-    tbody.innerHTML = emptyRow(5, "Nada por aqui", "Nenhuma associação bate com esses filtros.");
+    tbody.innerHTML = emptyRow(6, "Nada por aqui", "Nenhuma associação bate com esses filtros.");
     return;
   }
 
@@ -799,6 +799,7 @@ function renderCarteiraTable(list) {
         </td>
         <td data-l="Saúde">${saudeBadge(a.saude)}</td>
         <td class="num" data-l="MRR">${a.mrr != null ? moeda(a.mrr) : '<span class="muted">—</span>'}</td>
+        <td data-l="Endereço">${linkCell("c-endereco", k, a.endereco)}</td>
         <td class="center" data-l="Site conosco">${switchField("c-conosco", k, a.siteConosco)}</td>
         <td class="actions" data-l="">
           <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
@@ -856,6 +857,9 @@ function handleCarteiraEdit(ev) {
     renderRemodela();
   } else if (el.classList.contains("c-nome")) {
     a.nome = el.value;
+  } else if (el.classList.contains("c-endereco")) {
+    a.endereco = el.value;
+    refreshLinkButtons(el);
   } else {
     return;
   }
@@ -867,6 +871,9 @@ async function handleCarteiraClick(ev) {
   if (!btn) return;
   const a = ASSOCIACOES.find((x) => x.chave === btn.dataset.key);
   if (!a) return;
+
+  if (btn.dataset.act === "open") return openLink(a.endereco);
+  if (btn.dataset.act === "copy") return copyLink(a.endereco);
 
   if (btn.dataset.act === "del") {
     const ok = await confirmDialog(
@@ -1286,12 +1293,13 @@ function exportCsv() {
     ]);
   } else if (STATE.tab === "carteira") {
     name = "associacoes.csv";
-    head = ["Sigla", "Nome", "Saúde", "MRR", "Site conosco"];
+    head = ["Sigla", "Nome", "Saúde", "MRR", "Endereço", "Site conosco"];
     rows = VIEW.carteira.map((a) => [
       a.sigla,
       a.nome || "",
       (SAUDE_META[a.saude] || {}).label || "",
       a.mrr != null ? a.mrr : "",
+      a.endereco || "",
       a.siteConosco ? "sim" : "não",
     ]);
   } else if (STATE.tab === "evento") {
@@ -1405,8 +1413,10 @@ function syncTopbarHeight() {
     document.documentElement.style.setProperty("--topbar-h", `${Math.round(topbar.getBoundingClientRect().height)}px`);
 
   apply();
+  // o observer cobre mudanças de altura sem resize (o subtítulo some no
+  // celular); o listener cobre o resto, sem depender só dele
   if (window.ResizeObserver) new ResizeObserver(apply).observe(topbar);
-  else window.addEventListener("resize", apply);
+  window.addEventListener("resize", apply);
   window.addEventListener("resize", syncTableFit);
 }
 
