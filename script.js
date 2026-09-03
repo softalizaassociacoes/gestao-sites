@@ -1038,7 +1038,7 @@ function renderSeo() {
 
   const data = SEO.length ? SEO[0].auditadoEm : null;
   document.getElementById("seo-nota").innerHTML = data
-    ? `Varredura de <strong>${data}</strong> em todos os endereços das abas Sites e Eventos. Responde se o site <strong>tende a aparecer</strong> ao buscar pela sigla ou pelo nome, medindo duas coisas verificáveis: se a página permite ser indexada, e se a sigla e o nome estão onde o buscador lê — título, H1 e meta description. <strong>Não é a posição real no Google</strong>: para isso é preciso o Search Console ou a Custom Search API.`
+    ? `Varredura de <strong>${data}</strong> nos endereços da aba Sites e nos eventos a acontecer ou acontecendo. Responde se o site <strong>tende a aparecer</strong> ao buscar pela sigla ou pelo nome, medindo duas coisas verificáveis: se a página permite ser indexada, e se a sigla e o nome estão onde o buscador lê — título, H1 e meta description. <strong>Não é a posição real no Google</strong>: para isso é preciso o Search Console ou a Custom Search API.`
     : "";
   renderNavCounts();
 }
