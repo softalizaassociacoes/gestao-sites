@@ -1001,7 +1001,14 @@ tr.skip:hover .linkcell { opacity: 1; }
 /* ------------------------------------------------------------------- SEO */
 
 .seo-nome { font-size: 13px; font-weight: 660; letter-spacing: -0.012em; }
+/* endereços longos precisam de reticências, senão esticam a tabela inteira —
+   o valor completo fica no title */
 .seo-url {
+  display: block;
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
   font-size: 11.5px;
   color: var(--text-3);
@@ -1027,7 +1034,25 @@ tr.skip:hover .linkcell { opacity: 1; }
 .sinal.s-sim { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
 .sinal.s-nao { background: var(--off-soft); color: var(--text-3); border-color: var(--off-line); }
 
-.achados { display: flex; flex-wrap: wrap; gap: 4px; max-width: 42ch; }
+.seo-titulo {
+  font-size: 12px;
+  color: var(--text-2);
+  max-width: 26ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seo-redir {
+  margin-top: 2px;
+  max-width: 26ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--warn);
+}
+
+.achados { display: flex; flex-wrap: wrap; gap: 4px; max-width: 26ch; }
 .achado {
   padding: 2px 7px;
   border: 1px solid transparent;

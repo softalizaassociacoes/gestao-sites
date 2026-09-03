@@ -301,21 +301,27 @@
             </div>
             <div class="chips" id="seo-chips-veredito" role="group" aria-label="Filtrar por situação">
               <button class="chip on" data-value="" type="button">Tudo</button>
-              <button class="chip" data-value="problema" type="button"><span class="chip-dot d-risk"></span>Problema</button>
-              <button class="chip" data-value="atencao" type="button"><span class="chip-dot d-warn"></span>Atenção</button>
-              <button class="chip" data-value="aviso" type="button"><span class="chip-dot d-warn"></span>Ajustes</button>
-              <button class="chip" data-value="ok" type="button"><span class="chip-dot d-ok"></span>OK</button>
+              <button class="chip" data-value="nao" type="button"><span class="chip-dot d-risk"></span>Não aparece</button>
+              <button class="chip" data-value="fraco" type="button"><span class="chip-dot d-warn"></span>Difícil de achar</button>
+              <button class="chip" data-value="provavel" type="button"><span class="chip-dot d-accent"></span>Deve aparecer</button>
+              <button class="chip" data-value="forte" type="button"><span class="chip-dot d-ok"></span>Aparece bem</button>
             </div>
             <div class="chips" id="seo-chips-tipo" role="group" aria-label="Filtrar por tipo">
               <button class="chip on" data-value="" type="button">Todos</button>
               <button class="chip" data-value="associacao" type="button">Associações</button>
               <button class="chip" data-value="evento" type="button">Eventos</button>
             </div>
+            <div class="chips" id="seo-chips-status" role="group" aria-label="Filtrar por status do evento">
+              <button class="chip on" data-value="" type="button">Todo status</button>
+              <button class="chip" data-value="a_acontecer" type="button">A acontecer</button>
+              <button class="chip" data-value="acontecendo" type="button">Acontecendo</button>
+              <button class="chip" data-value="realizado" type="button">Realizado</button>
+            </div>
           </div>
 
           <div class="card">
             <div class="card-head">
-              <h2>Auditoria de SEO</h2>
+              <h2>Busca pela sigla ou nome</h2>
               <span class="count" id="seo-count"></span>
               <span class="spacer"></span>
               <div class="progress-inline" id="seo-progress"></div>
@@ -325,10 +331,10 @@
                 <thead>
                   <tr>
                     <th class="sortable" data-sort="rotulo">Site <span class="arrow"></span></th>
-                    <th class="sortable" data-sort="veredito">Situação <span class="arrow"></span></th>
-                    <th>Indexável</th>
-                    <th>Sinais</th>
-                    <th>O que corrigir</th>
+                    <th class="sortable" data-sort="veredito">Na busca <span class="arrow"></span></th>
+                    <th>Sigla no título</th>
+                    <th>Título da página</th>
+                    <th>O que falta</th>
                   </tr>
                 </thead>
                 <tbody id="seo-table-body"></tbody>

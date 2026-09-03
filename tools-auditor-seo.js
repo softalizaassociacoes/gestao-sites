@@ -6,7 +6,7 @@ const fs = require("fs");
 
 const ALVOS = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const SAIDA = process.argv[3];
-const CONCORRENCIA = 6;
+const CONCORRENCIA = 8;
 const TIMEOUT = 25000;
 
 const comProto = (u) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);

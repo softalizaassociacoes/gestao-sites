@@ -173,7 +173,7 @@ const STATE = {
   evento: { q: "", status: "", site: "", sort: { col: "nome", dir: "asc" } },
   remodela: { q: "", nv: "", origem: "" },
   carteira: { q: "", conosco: "", saude: "", sort: { col: "sigla", dir: "asc" } },
-  seo: { q: "", veredito: "", tipo: "", sort: { col: "veredito", dir: "asc" } },
+  seo: { q: "", veredito: "", tipo: "", statusEvento: "", sort: { col: "veredito", dir: "asc" } },
 };
 
 const VIEW = { assoc: [], evento: [], remodela: [], carteira: [], seo: [] };
@@ -906,60 +906,59 @@ async function handleCarteiraClick(ev) {
 
 const SEO = typeof SEO_BASE !== "undefined" ? SEO_BASE : [];
 
-const VEREDITO_META = {
-  ok: { label: "OK", cls: "b-ok" },
-  aviso: { label: "Ajustes", cls: "b-warn" },
-  atencao: { label: "Atenção", cls: "b-warn" },
-  problema: { label: "Problema", cls: "b-risk" },
+const ENCONTRAVEL_META = {
+  forte: { label: "Aparece bem", cls: "b-ok", ordem: 0 },
+  provavel: { label: "Deve aparecer", cls: "b-accent", ordem: 1 },
+  fraco: { label: "Difícil de achar", cls: "b-warn", ordem: 2 },
+  nao: { label: "Não aparece", cls: "b-risk", ordem: 3 },
 };
 
-const VEREDITO_ORDER = { problema: 0, atencao: 1, aviso: 2, ok: 3 };
-
-// os cinco sinais que mais pesam, em forma de pílula compacta
-function sinaisHtml(r) {
-  const sinais = [
-    { rot: "T", ok: !!r.titulo, nome: "Título" },
-    { rot: "D", ok: !!r.descricao, nome: "Meta description" },
-    { rot: "H", ok: r.h1 === 1, nome: `H1 (${r.h1 == null ? "—" : r.h1})` },
-    { rot: "C", ok: r.canonical, nome: "Canonical" },
-    { rot: "S", ok: !!r.sitemap, nome: "Sitemap" },
-  ];
-  return `<div class="sinais">${sinais
-    .map((s) => `<span class="sinal ${s.ok ? "s-sim" : "s-nao"}" title="${s.nome}: ${s.ok ? "ok" : "faltando"}">${s.rot}</span>`)
-    .join("")}</div>`;
-}
+const STATUS_EVENTO_LABEL = {
+  a_acontecer: "a acontecer",
+  acontecendo: "acontecendo",
+  realizado: "realizado",
+};
 
 function renderSeoMetrics(list) {
   const total = list.length;
-  const ok = list.filter((r) => r.veredito === "ok").length;
-  const problema = list.filter((r) => r.veredito === "problema").length;
-  const indexaveis = list.filter((r) => r.indexavel).length;
+  const cont = (v) => list.filter((r) => r.encontravel === v).length;
+  const bem = cont("forte") + cont("provavel");
+  const nao = cont("nao");
+  const eventos = list.filter((r) => r.tipo === "evento").length;
 
   document.getElementById("seo-metrics").innerHTML = metricsHtml([
-    { label: "Sites auditados", value: total, note: `${list.filter((r) => r.tipo === "evento").length} eventos ativos` },
-    { label: "Indexáveis", value: indexaveis, dot: "d-ok", note: `${total - indexaveis} pedem para não indexar` },
-    { label: "Com problema", value: problema, dot: "d-risk", note: "Bloqueiam a indexação" },
-    { label: "Sem nenhum ajuste", value: ok, dot: "d-accent", note: `${pct(ok, total)}% do total` },
+    {
+      label: "Sites verificados",
+      value: total,
+      note: `${eventos} eventos e ${total - eventos} associações`,
+    },
+    { label: "Devem aparecer", value: bem, dot: "d-ok", note: `${pct(bem, total)}% do total` },
+    { label: "Não aparecem", value: nao, dot: "d-risk", note: "Bloqueados, fora do ar ou atrás de login" },
+    {
+      label: "Sigla no título",
+      value: list.filter((r) => r.siglaNoTitulo).length,
+      dot: "d-accent",
+      note: "O sinal que mais pesa na busca pela sigla",
+    },
   ]);
 
   document.getElementById("seo-composition").innerHTML =
-    compositionHtml("Situação", [
-      { cls: "s-ok", label: "OK", count: ok },
-      { cls: "s-warn", label: "Ajustes", count: list.filter((r) => r.veredito === "aviso").length },
-      { cls: "s-warn", label: "Atenção", count: list.filter((r) => r.veredito === "atencao").length },
-      { cls: "s-risk", label: "Problema", count: problema },
+    compositionHtml("Busca pela sigla ou nome", [
+      { cls: "s-ok", label: "Aparece bem", count: cont("forte") },
+      { cls: "s-accent", label: "Deve aparecer", count: cont("provavel") },
+      { cls: "s-warn", label: "Difícil de achar", count: cont("fraco") },
+      { cls: "s-risk", label: "Não aparece", count: nao },
     ]) +
-    compositionHtml("O que mais falta", [
-      { cls: "s-off", label: "Meta description", count: list.filter((r) => !r.descricao).length },
-      { cls: "s-warn", label: "H1", count: list.filter((r) => r.h1 === 0).length },
-      { cls: "s-accent", label: "Sitemap", count: list.filter((r) => !r.sitemap).length },
-      { cls: "s-risk", label: "Canonical", count: list.filter((r) => !r.canonical).length },
+    compositionHtml("Por que não aparece", [
+      { cls: "s-risk", label: "Pede noindex", count: list.filter((r) => r.problemas.some((p) => /noindex|robots\.txt/.test(p))).length },
+      { cls: "s-warn", label: "Atrás de login", count: list.filter((r) => r.problemas.some((p) => /login/.test(p))).length },
+      { cls: "s-off", label: "Fora do ar", count: list.filter((r) => r.problemas.some((p) => /fora do ar/.test(p))).length },
     ]);
 
   const prog = document.getElementById("seo-progress");
   prog.innerHTML = total
-    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(indexaveis, total)}%"></div></div>
-       <span>${indexaveis}/${total} indexáveis</span>`
+    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(bem, total)}%"></div></div>
+       <span>${bem}/${total} devem aparecer</span>`
     : "";
 }
 
@@ -972,30 +971,37 @@ function renderSeoTable(list) {
 
   tbody.innerHTML = list
     .map((r) => {
-      const meta = VEREDITO_META[r.veredito] || VEREDITO_META.aviso;
-      const achados = [
-        ...r.problemas.map((p) => `<span class="achado a-erro">${esc(p)}</span>`),
-        ...r.avisos.map((a) => `<span class="achado a-aviso">${esc(a)}</span>`),
-      ].join("");
+      const meta = ENCONTRAVEL_META[r.encontravel] || ENCONTRAVEL_META.fraco;
+      // quem não aparece: o motivo é o bloqueio; quem aparece: o que falta afinar
+      const motivos = r.encontravel === "nao" ? r.problemas : r.lacunas;
+      const classe = r.encontravel === "nao" ? "a-erro" : "a-aviso";
+      const achados = motivos.length
+        ? motivos.map((m) => `<span class="achado ${classe}">${esc(m)}</span>`).join("")
+        : '<span class="muted">Nada a ajustar</span>';
+      const sub = r.tipo === "evento" ? `evento · ${STATUS_EVENTO_LABEL[r.statusEvento] || "—"}` : "associação";
+
       return `<tr>
         <td class="ident-td" data-l="Site">
           <div class="ident">
-            ${avatar(r.rotulo)}
+            ${avatar(r.sigla || r.rotulo)}
             <div class="ident-fields">
               <span class="seo-nome">${esc(r.rotulo)}</span>
-              <a class="seo-url" href="${esc(withProto(r.url))}" target="_blank" rel="noopener noreferrer">${esc(displayLink(r.url))}</a>
+              <a class="seo-url" href="${esc(withProto(r.url))}" target="_blank" rel="noopener noreferrer" title="${esc(r.url)}">${esc(displayLink(r.url))}</a>
             </div>
           </div>
         </td>
-        <td data-l="Situação">
+        <td data-l="Na busca">
           <span class="badge ${meta.cls}"><i></i>${meta.label}</span>
-          <div class="seo-tipo">${r.tipo === "evento" ? "evento" : "associação"}</div>
+          <div class="seo-tipo">${sub}</div>
         </td>
-        <td class="center" data-l="Indexável">
-          <span class="badge ${r.indexavel ? "b-ok" : "b-risk"}">${r.indexavel ? "Sim" : "Não"}</span>
+        <td class="center" data-l="Sigla no título">
+          <span class="badge ${r.siglaNoTitulo ? "b-ok" : "b-none"}">${r.siglaNoTitulo ? "Sim" : "Não"}</span>
         </td>
-        <td data-l="Sinais">${sinaisHtml(r)}</td>
-        <td data-l="O que corrigir"><div class="achados">${achados || '<span class="muted">Nada a corrigir</span>'}</div></td>
+        <td data-l="Título da página">
+          <div class="seo-titulo" title="${esc(r.titulo || '')}">${r.titulo ? esc(r.titulo) : '<span class="muted">sem título</span>'}</div>
+          ${r.urlFinal ? `<div class="seo-redir" title="${esc(r.urlFinal)}">vai para ${esc(displayLink(r.urlFinal))}</div>` : ""}
+        </td>
+        <td data-l="O que falta"><div class="achados">${achados}</div></td>
       </tr>`;
     })
     .join("");
@@ -1004,18 +1010,19 @@ function renderSeoTable(list) {
 function renderSeo() {
   const s = STATE.seo;
   const filtered = SEO.filter((r) => {
-    if (s.q && !`${r.rotulo} ${r.url} ${r.titulo || ""}`.toLowerCase().includes(s.q)) return false;
-    if (s.veredito && r.veredito !== s.veredito) return false;
+    if (s.q && !`${r.rotulo} ${r.sigla || ""} ${r.url} ${r.titulo || ""}`.toLowerCase().includes(s.q)) return false;
+    if (s.veredito && r.encontravel !== s.veredito) return false;
     if (s.tipo && r.tipo !== s.tipo) return false;
+    if (s.statusEvento && r.statusEvento !== s.statusEvento) return false;
     return true;
   });
 
   const sorted = [...filtered].sort((a, b) => {
     const d = s.sort.dir === "desc" ? -1 : 1;
     if (s.sort.col === "veredito") {
-      const x = VEREDITO_ORDER[a.veredito] ?? 9;
-      const y = VEREDITO_ORDER[b.veredito] ?? 9;
-      if (x !== y) return (x - y) * d;
+      const x = (ENCONTRAVEL_META[a.encontravel] || {}).ordem;
+      const y = (ENCONTRAVEL_META[b.encontravel] || {}).ordem;
+      if (x !== y) return (y - x) * d;
     }
     return a.rotulo.localeCompare(b.rotulo, "pt-BR") * d;
   });
@@ -1031,7 +1038,7 @@ function renderSeo() {
 
   const data = SEO.length ? SEO[0].auditadoEm : null;
   document.getElementById("seo-nota").innerHTML = data
-    ? `Varredura de <strong>${data}</strong>. Mede indexabilidade e SEO on-page — se a página pede para não ser indexada, e se tem título, descrição, H1, canonical, sitemap e robots.txt. <strong>Não mede se o Google já indexou</strong>: isso exige acesso ao Search Console.`
+    ? `Varredura de <strong>${data}</strong> em todos os endereços das abas Sites e Eventos. Responde se o site <strong>tende a aparecer</strong> ao buscar pela sigla ou pelo nome, medindo duas coisas verificáveis: se a página permite ser indexada, e se a sigla e o nome estão onde o buscador lê — título, H1 e meta description. <strong>Não é a posição real no Google</strong>: para isso é preciso o Search Console ou a Custom Search API.`
     : "";
   renderNavCounts();
 }
@@ -1438,19 +1445,17 @@ function exportCsv() {
     ]);
   } else if (STATE.tab === "seo") {
     name = "seo.csv";
-    head = ["Site", "Tipo", "Endereço", "Situação", "Indexável", "Título", "Meta description", "H1", "Canonical", "Sitemap", "O que corrigir"];
+    head = ["Site", "Sigla", "Tipo", "Status do evento", "Endereço", "Na busca", "Sigla no título", "Título", "O que falta"];
     rows = VIEW.seo.map((r) => [
       r.rotulo,
+      r.sigla || "",
       r.tipo,
+      r.statusEvento || "",
       r.url,
-      (VEREDITO_META[r.veredito] || {}).label || r.veredito,
-      r.indexavel ? "sim" : "não",
+      (ENCONTRAVEL_META[r.encontravel] || {}).label || r.encontravel,
+      r.siglaNoTitulo ? "sim" : "não",
       r.titulo || "",
-      r.descricao || "",
-      r.h1 == null ? "" : r.h1,
-      r.canonical ? "sim" : "não",
-      r.sitemap || "",
-      [...r.problemas, ...r.avisos].join(" | "),
+      (r.encontravel === "nao" ? r.problemas : r.lacunas).join(" | "),
     ]);
   } else if (STATE.tab === "carteira") {
     name = "associacoes.csv";
@@ -1777,6 +1782,10 @@ async function init() {
   });
   initChips("seo-chips-tipo", (v) => {
     STATE.seo.tipo = v;
+    renderSeo();
+  });
+  initChips("seo-chips-status", (v) => {
+    STATE.seo.statusEvento = v;
     renderSeo();
   });
   initSort("panel-seo", "seo", renderSeo);
