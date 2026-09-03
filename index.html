@@ -296,15 +296,15 @@
           <div class="filters">
             <div class="search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-              <input type="text" id="seo-search" placeholder="Buscar por sigla, evento ou endereço…" autocomplete="off" />
+              <input type="text" id="seo-search" placeholder="Buscar por sigla, evento, endereço ou pesquisa…" autocomplete="off" />
               <kbd>/</kbd>
             </div>
             <div class="chips" id="seo-chips-veredito" role="group" aria-label="Filtrar por situação">
               <button class="chip on" data-value="" type="button">Tudo</button>
-              <button class="chip" data-value="nao" type="button"><span class="chip-dot d-risk"></span>Não aparece</button>
-              <button class="chip" data-value="fraco" type="button"><span class="chip-dot d-warn"></span>Difícil de achar</button>
-              <button class="chip" data-value="provavel" type="button"><span class="chip-dot d-accent"></span>Deve aparecer</button>
-              <button class="chip" data-value="forte" type="button"><span class="chip-dot d-ok"></span>Aparece bem</button>
+              <button class="chip" data-value="nao" type="button"><span class="chip-dot d-risk"></span>Sem SEO</button>
+              <button class="chip" data-value="fraco" type="button"><span class="chip-dot d-warn"></span>SEO Configurando</button>
+              <button class="chip" data-value="provavel" type="button"><span class="chip-dot d-accent"></span>SEO Bom</button>
+              <button class="chip" data-value="forte" type="button"><span class="chip-dot d-ok"></span>SEO Pronto</button>
             </div>
             <div class="chips" id="seo-chips-tipo" role="group" aria-label="Filtrar por tipo">
               <button class="chip on" data-value="" type="button">Todos</button>
@@ -332,7 +332,8 @@
                     <th class="sortable" data-sort="rotulo">Site <span class="arrow"></span></th>
                     <th class="sortable" data-sort="veredito">Na busca <span class="arrow"></span></th>
                     <th>Indexado?</th>
-                    <th>Título da página</th>
+                    <th>Pesquisa</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody id="seo-table-body"></tbody>

@@ -105,6 +105,9 @@ function seoParaBanco(r) {
     url_final: r.urlFinal,
     auditado_em: r.auditadoEm,
     dados: {
+      // pesquisa e removido moram no JSON para não exigir migração de colunas
+      pesquisa: r.pesquisa || "",
+      removido: !!r.removido,
       indexavel: r.indexavel,
       siglaNoTitulo: r.siglaNoTitulo,
       nomeNoTitulo: r.nomeNoTitulo,
@@ -137,6 +140,8 @@ function seoDoBanco(r) {
     titulo: r.titulo,
     urlFinal: r.url_final,
     auditadoEm: r.auditado_em,
+    pesquisa: d.pesquisa || r.sigla || r.rotulo || "",
+    removido: !!d.removido,
     indexavel: d.indexavel,
     siglaNoTitulo: d.siglaNoTitulo,
     nomeNoTitulo: d.nomeNoTitulo,

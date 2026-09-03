@@ -41,13 +41,30 @@ function semearEventos() {
 // tabela; "indexado" é marcação manual, o resto vem da varredura
 function semearSeo() {
   const base = typeof SEO_BASE !== "undefined" ? SEO_BASE : [];
-  return base.map((r) => ({ ...r, seoId: `${r.tipo}:${r.chave}`, indexado: !!r.indexado }));
+  return base.map((r) => ({
+    ...r,
+    seoId: `${r.tipo}:${r.chave}`,
+    indexado: !!r.indexado,
+    // a busca padrão é a sigla da associação; o usuário pode ajustar na tabela
+    pesquisa: r.pesquisa || r.sigla || r.rotulo || "",
+    removido: false,
+  }));
 }
 
 // Acrescenta à lista os registros da base que ainda não existem nela, casando
 // por chave. Sem isso, quem já tem cache (ou banco) de um deploy anterior
 // nunca enxerga as associações que entraram na base depois — foi o que fez a
 // aba Associações continuar com 56 em vez de 168.
+// registros gravados antes da coluna Pesquisa chegam sem ela; a sigla é o
+// ponto de partida natural da busca
+function normalizarSeo(lista) {
+  return lista.map((r) => ({
+    ...r,
+    pesquisa: r.pesquisa != null && r.pesquisa !== "" ? r.pesquisa : r.sigla || r.rotulo || "",
+    removido: !!r.removido,
+  }));
+}
+
 function completarComBase(lista, base, chaveDe) {
   const vistos = new Set(lista.map(chaveDe));
   const novos = base.filter((r) => !vistos.has(chaveDe(r)));
@@ -919,17 +936,17 @@ async function handleCarteiraClick(ev) {
 // ---------------------------------------------------------------------------
 
 const ENCONTRAVEL_META = {
-  forte: { label: "Aparece bem", cls: "b-ok", ordem: 0 },
-  provavel: { label: "Deve aparecer", cls: "b-accent", ordem: 1 },
-  fraco: { label: "Difícil de achar", cls: "b-warn", ordem: 2 },
-  nao: { label: "Não aparece", cls: "b-risk", ordem: 3 },
+  forte: { label: "SEO Pronto", cls: "b-ok", ordem: 0 },
+  provavel: { label: "SEO Bom", cls: "b-accent", ordem: 1 },
+  fraco: { label: "SEO Configurando", cls: "b-warn", ordem: 2 },
+  nao: { label: "Sem SEO", cls: "b-risk", ordem: 3 },
 };
 
 const ENCONTRAVEL_OPTIONS = [
-  { value: "forte", label: "Aparece bem" },
-  { value: "provavel", label: "Deve aparecer" },
-  { value: "fraco", label: "Difícil de achar" },
-  { value: "nao", label: "Não aparece" },
+  { value: "forte", label: "SEO Pronto" },
+  { value: "provavel", label: "SEO Bom" },
+  { value: "fraco", label: "SEO Configurando" },
+  { value: "nao", label: "Sem SEO" },
 ];
 
 const STATUS_EVENTO_LABEL = {
@@ -952,17 +969,17 @@ function renderSeoMetrics(list) {
       value: total,
       note: `${eventos} eventos e ${total - eventos} associações`,
     },
-    { label: "Devem aparecer", value: bem, dot: "d-ok", note: `${pct(bem, total)}% do total` },
-    { label: "Não aparecem", value: nao, dot: "d-risk", note: "Bloqueados, fora do ar ou atrás de login" },
+    { label: "SEO pronto ou bom", value: bem, dot: "d-ok", note: `${pct(bem, total)}% do total` },
+    { label: "Sem SEO", value: nao, dot: "d-risk", note: "Bloqueados, fora do ar ou atrás de login" },
     { label: "Marcados como indexados", value: indexados, dot: "d-accent", note: `${total - indexados} ainda por conferir` },
   ]);
 
   document.getElementById("seo-composition").innerHTML =
     compositionHtml("Busca pela sigla ou nome", [
-      { cls: "s-ok", label: "Aparece bem", count: cont("forte") },
-      { cls: "s-accent", label: "Deve aparecer", count: cont("provavel") },
-      { cls: "s-warn", label: "Difícil de achar", count: cont("fraco") },
-      { cls: "s-risk", label: "Não aparece", count: nao },
+      { cls: "s-ok", label: "SEO Pronto", count: cont("forte") },
+      { cls: "s-accent", label: "SEO Bom", count: cont("provavel") },
+      { cls: "s-warn", label: "SEO Configurando", count: cont("fraco") },
+      { cls: "s-risk", label: "Sem SEO", count: nao },
     ]) +
     compositionHtml("Conferência de indexação", [
       { cls: "s-ok", label: "Indexado", count: indexados },
@@ -979,7 +996,7 @@ function renderSeoMetrics(list) {
 function renderSeoTable(list) {
   const tbody = document.getElementById("seo-table-body");
   if (!list.length) {
-    tbody.innerHTML = emptyRow(4, "Nada por aqui", "Nenhum site bate com esses filtros.");
+    tbody.innerHTML = emptyRow(5, "Nada por aqui", "Nenhum site bate com esses filtros.");
     return;
   }
 
@@ -1003,9 +1020,12 @@ function renderSeoTable(list) {
           <div class="seo-tipo">${sub}</div>
         </td>
         <td class="center" data-l="Indexado?">${switchField("seo-indexado", k, r.indexado)}</td>
-        <td data-l="Título da página">
-          <div class="seo-titulo" title="${esc(r.titulo || "")}">${r.titulo ? esc(r.titulo) : '<span class="muted">sem título</span>'}</div>
+        <td data-l="Pesquisa">
+          <input class="f seo-pesquisa" type="text" ${k} value="${esc(r.pesquisa || "")}" placeholder="Sigla da associação" />
           ${r.urlFinal ? `<div class="seo-redir" title="${esc(r.urlFinal)}">vai para ${esc(displayLink(r.urlFinal))}</div>` : ""}
+        </td>
+        <td class="actions" data-l="">
+          <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
         </td>
       </tr>`;
     })
@@ -1015,7 +1035,12 @@ function renderSeoTable(list) {
 function renderSeo() {
   const s = STATE.seo;
   const filtered = SEO.filter((r) => {
-    if (s.q && !`${r.rotulo} ${r.sigla || ""} ${r.url} ${r.titulo || ""}`.toLowerCase().includes(s.q)) return false;
+    if (r.removido) return false;
+    if (
+      s.q &&
+      !`${r.rotulo} ${r.sigla || ""} ${r.url} ${r.titulo || ""} ${r.pesquisa || ""}`.toLowerCase().includes(s.q)
+    )
+      return false;
     if (s.veredito && r.encontravel !== s.veredito) return false;
     if (s.tipo && r.tipo !== s.tipo) return false;
     if (s.statusEvento && r.statusEvento !== s.statusEvento) return false;
@@ -1038,12 +1063,13 @@ function renderSeo() {
   renderSeoTable(sorted);
   syncTableFit();
 
+  const totalSeo = SEO.filter((r) => !r.removido).length;
   document.getElementById("seo-count").textContent =
-    sorted.length === SEO.length ? `${SEO.length} no total` : `${sorted.length} de ${SEO.length}`;
+    sorted.length === totalSeo ? `${totalSeo} no total` : `${sorted.length} de ${totalSeo}`;
 
   const data = SEO.length ? SEO[0].auditadoEm : null;
   document.getElementById("seo-nota").innerHTML = data
-    ? `Varredura de <strong>${data}</strong> nos endereços da aba Sites e nos eventos a acontecer ou acontecendo. A coluna <strong>Na busca</strong> começa com o resultado automático — se a página permite ser indexada e se a sigla e o nome estão no título, H1 e meta description — e você pode corrigir à mão. <strong>Indexado?</strong> é marcação sua, para registrar o que já conferiu na busca de verdade.`
+    ? `Varredura de <strong>${data}</strong> nos endereços da aba Sites e nos eventos a acontecer ou acontecendo. A coluna <strong>Na busca</strong> começa com o resultado automático — se a página permite ser indexada e se a sigla e o nome estão no título, H1 e meta description — e você pode corrigir à mão. <strong>Indexado?</strong> é marcação sua, para registrar o que já conferiu na busca de verdade. <strong>Pesquisa</strong> guarda o termo usado nessa conferência: começa com a sigla da associação e você pode trocar.`
     : "";
   renderNavCounts();
 }
@@ -1067,6 +1093,32 @@ function handleSeoEdit(ev) {
     salvarSeo(r);
     renderSeo();
     toast(el.checked ? `"${r.rotulo}" marcado como indexado.` : `"${r.rotulo}" desmarcado.`, "info");
+    return;
+  }
+
+  if (el.classList.contains("seo-pesquisa")) {
+    r.pesquisa = el.value;
+    salvarSeo(r);
+  }
+}
+
+async function handleSeoClick(ev) {
+  const btn = ev.target.closest("button[data-act]");
+  if (!btn) return;
+  const r = SEO.find((x) => x.seoId === btn.dataset.seo);
+  if (!r) return;
+
+  if (btn.dataset.act === "del") {
+    const ok = await confirmDialog(
+      "Excluir da aba SEOs",
+      `"${r.rotulo}" sai desta aba. O registro continua no banco, marcado como removido, e as outras abas não mudam.`,
+      "Excluir"
+    );
+    if (!ok) return;
+    r.removido = true;
+    salvarSeo(r);
+    renderSeo();
+    toast(`"${r.rotulo}" excluída da aba SEOs.`);
   }
 }
 
@@ -1472,7 +1524,7 @@ function exportCsv() {
     ]);
   } else if (STATE.tab === "seo") {
     name = "seo.csv";
-    head = ["Site", "Sigla", "Tipo", "Status do evento", "Endereço", "Na busca", "Indexado", "Título", "O que falta"];
+    head = ["Site", "Sigla", "Tipo", "Status do evento", "Endereço", "Na busca", "Indexado", "Pesquisa", "O que falta"];
     rows = VIEW.seo.map((r) => [
       r.rotulo,
       r.sigla || "",
@@ -1481,7 +1533,7 @@ function exportCsv() {
       r.url,
       (ENCONTRAVEL_META[r.encontravel] || {}).label || r.encontravel,
       r.indexado ? "sim" : "não",
-      r.titulo || "",
+      r.pesquisa || "",
       (r.encontravel === "nao" ? r.problemas : r.lacunas).join(" | "),
     ]);
   } else if (STATE.tab === "carteira") {
@@ -1540,7 +1592,7 @@ function renderNavCounts() {
   document.getElementById("count-evento").textContent = EVENTOS.filter((e) => !e.removido).length;
   document.getElementById("count-remodela").textContent = getSites().length;
   document.getElementById("count-carteira").textContent = ASSOCIACOES.filter((a) => !a.removido).length;
-  document.getElementById("count-seo").textContent = SEO.length;
+  document.getElementById("count-seo").textContent = SEO.filter((r) => !r.removido).length;
 }
 
 function setTab(tab) {
@@ -1701,7 +1753,7 @@ async function carregarModelo() {
     const seo = completarComBase(remoto.seo || [], semearSeo(), chaveS);
     ASSOCIACOES = a.lista;
     EVENTOS = e.lista;
-    SEO = seo.lista;
+    SEO = normalizarSeo(seo.lista);
     gravarCache();
 
     if (a.novos.length || e.novos.length || seo.novos.length) {
@@ -1719,7 +1771,7 @@ async function carregarModelo() {
   const cacheS = lerCache(CACHE_SEO);
   ASSOCIACOES = cacheA ? completarComBase(cacheA, semearAssociacoes(), chaveA).lista : semearAssociacoes();
   EVENTOS = cacheE ? completarComBase(cacheE, semearEventos(), chaveE).lista : semearEventos();
-  SEO = cacheS ? completarComBase(cacheS, semearSeo(), chaveS).lista : semearSeo();
+  SEO = normalizarSeo(cacheS ? completarComBase(cacheS, semearSeo(), chaveS).lista : semearSeo());
   gravarCache();
 
   if (BANCO.ativo) await semearBanco();
@@ -1823,6 +1875,7 @@ async function init() {
   });
   const seoBody = document.getElementById("seo-table-body");
   seoBody.addEventListener("change", handleSeoEdit);
+  seoBody.addEventListener("click", handleSeoClick);
 
   initSort("panel-seo", "seo", renderSeo);
 
