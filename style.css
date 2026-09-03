@@ -1044,14 +1044,8 @@ tr.skip:hover .linkcell { opacity: 1; }
 .sinal.s-sim { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
 .sinal.s-nao { background: var(--off-soft); color: var(--text-3); border-color: var(--off-line); }
 
-.seo-titulo {
-  font-size: 12px;
-  color: var(--text-2);
-  max-width: 26ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* termo usado para conferir o site na busca — começa com a sigla */
+.seo-pesquisa { min-width: 14ch; max-width: 26ch; }
 .seo-redir {
   margin-top: 2px;
   max-width: 26ch;
