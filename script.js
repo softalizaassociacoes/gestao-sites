@@ -173,9 +173,10 @@ const STATE = {
   evento: { q: "", status: "", site: "", sort: { col: "nome", dir: "asc" } },
   remodela: { q: "", nv: "", origem: "" },
   carteira: { q: "", conosco: "", saude: "", sort: { col: "sigla", dir: "asc" } },
+  seo: { q: "", veredito: "", tipo: "", sort: { col: "veredito", dir: "asc" } },
 };
 
-const VIEW = { assoc: [], evento: [], remodela: [], carteira: [] };
+const VIEW = { assoc: [], evento: [], remodela: [], carteira: [], seo: [] };
 
 const PAGES = {
   assoc: {
@@ -191,6 +192,11 @@ const PAGES = {
   carteira: {
     title: "Associações",
     sub: "Todo o roster do SoftaHub — quais têm site conosco e quais não.",
+    add: "Nova associação",
+  },
+  seo: {
+    title: "SEOs",
+    sub: "Indexabilidade e SEO on-page dos sites no ar — associações e eventos ativos.",
     add: "Nova associação",
   },
   remodela: {
@@ -892,6 +898,145 @@ async function handleCarteiraClick(ev) {
 }
 
 // ---------------------------------------------------------------------------
+// Aba: SEOs
+//
+// Resultado da varredura registrada em data.js. Mede indexabilidade e SEO
+// on-page; não mede se o Google já indexou, o que exigiria o Search Console.
+// ---------------------------------------------------------------------------
+
+const SEO = typeof SEO_BASE !== "undefined" ? SEO_BASE : [];
+
+const VEREDITO_META = {
+  ok: { label: "OK", cls: "b-ok" },
+  aviso: { label: "Ajustes", cls: "b-warn" },
+  atencao: { label: "Atenção", cls: "b-warn" },
+  problema: { label: "Problema", cls: "b-risk" },
+};
+
+const VEREDITO_ORDER = { problema: 0, atencao: 1, aviso: 2, ok: 3 };
+
+// os cinco sinais que mais pesam, em forma de pílula compacta
+function sinaisHtml(r) {
+  const sinais = [
+    { rot: "T", ok: !!r.titulo, nome: "Título" },
+    { rot: "D", ok: !!r.descricao, nome: "Meta description" },
+    { rot: "H", ok: r.h1 === 1, nome: `H1 (${r.h1 == null ? "—" : r.h1})` },
+    { rot: "C", ok: r.canonical, nome: "Canonical" },
+    { rot: "S", ok: !!r.sitemap, nome: "Sitemap" },
+  ];
+  return `<div class="sinais">${sinais
+    .map((s) => `<span class="sinal ${s.ok ? "s-sim" : "s-nao"}" title="${s.nome}: ${s.ok ? "ok" : "faltando"}">${s.rot}</span>`)
+    .join("")}</div>`;
+}
+
+function renderSeoMetrics(list) {
+  const total = list.length;
+  const ok = list.filter((r) => r.veredito === "ok").length;
+  const problema = list.filter((r) => r.veredito === "problema").length;
+  const indexaveis = list.filter((r) => r.indexavel).length;
+
+  document.getElementById("seo-metrics").innerHTML = metricsHtml([
+    { label: "Sites auditados", value: total, note: `${list.filter((r) => r.tipo === "evento").length} eventos ativos` },
+    { label: "Indexáveis", value: indexaveis, dot: "d-ok", note: `${total - indexaveis} pedem para não indexar` },
+    { label: "Com problema", value: problema, dot: "d-risk", note: "Bloqueiam a indexação" },
+    { label: "Sem nenhum ajuste", value: ok, dot: "d-accent", note: `${pct(ok, total)}% do total` },
+  ]);
+
+  document.getElementById("seo-composition").innerHTML =
+    compositionHtml("Situação", [
+      { cls: "s-ok", label: "OK", count: ok },
+      { cls: "s-warn", label: "Ajustes", count: list.filter((r) => r.veredito === "aviso").length },
+      { cls: "s-warn", label: "Atenção", count: list.filter((r) => r.veredito === "atencao").length },
+      { cls: "s-risk", label: "Problema", count: problema },
+    ]) +
+    compositionHtml("O que mais falta", [
+      { cls: "s-off", label: "Meta description", count: list.filter((r) => !r.descricao).length },
+      { cls: "s-warn", label: "H1", count: list.filter((r) => r.h1 === 0).length },
+      { cls: "s-accent", label: "Sitemap", count: list.filter((r) => !r.sitemap).length },
+      { cls: "s-risk", label: "Canonical", count: list.filter((r) => !r.canonical).length },
+    ]);
+
+  const prog = document.getElementById("seo-progress");
+  prog.innerHTML = total
+    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(indexaveis, total)}%"></div></div>
+       <span>${indexaveis}/${total} indexáveis</span>`
+    : "";
+}
+
+function renderSeoTable(list) {
+  const tbody = document.getElementById("seo-table-body");
+  if (!list.length) {
+    tbody.innerHTML = emptyRow(5, "Nada por aqui", "Nenhum site bate com esses filtros.");
+    return;
+  }
+
+  tbody.innerHTML = list
+    .map((r) => {
+      const meta = VEREDITO_META[r.veredito] || VEREDITO_META.aviso;
+      const achados = [
+        ...r.problemas.map((p) => `<span class="achado a-erro">${esc(p)}</span>`),
+        ...r.avisos.map((a) => `<span class="achado a-aviso">${esc(a)}</span>`),
+      ].join("");
+      return `<tr>
+        <td class="ident-td" data-l="Site">
+          <div class="ident">
+            ${avatar(r.rotulo)}
+            <div class="ident-fields">
+              <span class="seo-nome">${esc(r.rotulo)}</span>
+              <a class="seo-url" href="${esc(withProto(r.url))}" target="_blank" rel="noopener noreferrer">${esc(displayLink(r.url))}</a>
+            </div>
+          </div>
+        </td>
+        <td data-l="Situação">
+          <span class="badge ${meta.cls}"><i></i>${meta.label}</span>
+          <div class="seo-tipo">${r.tipo === "evento" ? "evento" : "associação"}</div>
+        </td>
+        <td class="center" data-l="Indexável">
+          <span class="badge ${r.indexavel ? "b-ok" : "b-risk"}">${r.indexavel ? "Sim" : "Não"}</span>
+        </td>
+        <td data-l="Sinais">${sinaisHtml(r)}</td>
+        <td data-l="O que corrigir"><div class="achados">${achados || '<span class="muted">Nada a corrigir</span>'}</div></td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderSeo() {
+  const s = STATE.seo;
+  const filtered = SEO.filter((r) => {
+    if (s.q && !`${r.rotulo} ${r.url} ${r.titulo || ""}`.toLowerCase().includes(s.q)) return false;
+    if (s.veredito && r.veredito !== s.veredito) return false;
+    if (s.tipo && r.tipo !== s.tipo) return false;
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    const d = s.sort.dir === "desc" ? -1 : 1;
+    if (s.sort.col === "veredito") {
+      const x = VEREDITO_ORDER[a.veredito] ?? 9;
+      const y = VEREDITO_ORDER[b.veredito] ?? 9;
+      if (x !== y) return (x - y) * d;
+    }
+    return a.rotulo.localeCompare(b.rotulo, "pt-BR") * d;
+  });
+
+  VIEW.seo = sorted;
+
+  renderSeoMetrics(sorted);
+  renderSeoTable(sorted);
+  syncTableFit();
+
+  document.getElementById("seo-count").textContent =
+    sorted.length === SEO.length ? `${SEO.length} no total` : `${sorted.length} de ${SEO.length}`;
+
+  const data = SEO.length ? SEO[0].auditadoEm : null;
+  document.getElementById("seo-nota").innerHTML = data
+    ? `Varredura de <strong>${data}</strong>. Mede indexabilidade e SEO on-page — se a página pede para não ser indexada, e se tem título, descrição, H1, canonical, sitemap e robots.txt. <strong>Não mede se o Google já indexou</strong>: isso exige acesso ao Search Console.`
+    : "";
+  renderNavCounts();
+}
+
+// ---------------------------------------------------------------------------
 // Aba: Eventos
 // ---------------------------------------------------------------------------
 
@@ -1291,6 +1436,22 @@ function exportCsv() {
       labelOf(SITE_ATUAL_OPTIONS, a.siteAtual),
       a.endereco || "",
     ]);
+  } else if (STATE.tab === "seo") {
+    name = "seo.csv";
+    head = ["Site", "Tipo", "Endereço", "Situação", "Indexável", "Título", "Meta description", "H1", "Canonical", "Sitemap", "O que corrigir"];
+    rows = VIEW.seo.map((r) => [
+      r.rotulo,
+      r.tipo,
+      r.url,
+      (VEREDITO_META[r.veredito] || {}).label || r.veredito,
+      r.indexavel ? "sim" : "não",
+      r.titulo || "",
+      r.descricao || "",
+      r.h1 == null ? "" : r.h1,
+      r.canonical ? "sim" : "não",
+      r.sitemap || "",
+      [...r.problemas, ...r.avisos].join(" | "),
+    ]);
   } else if (STATE.tab === "carteira") {
     name = "associacoes.csv";
     head = ["Sigla", "Nome", "Saúde", "MRR", "Endereço", "Site conosco"];
@@ -1347,6 +1508,7 @@ function renderNavCounts() {
   document.getElementById("count-evento").textContent = EVENTOS.filter((e) => !e.removido).length;
   document.getElementById("count-remodela").textContent = getSites().length;
   document.getElementById("count-carteira").textContent = ASSOCIACOES.filter((a) => !a.removido).length;
+  document.getElementById("count-seo").textContent = SEO.length;
 }
 
 function setTab(tab) {
@@ -1367,6 +1529,7 @@ function setTab(tab) {
   if (tab === "assoc") renderAssoc();
   else if (tab === "evento") renderEvento();
   else if (tab === "carteira") renderCarteira();
+  else if (tab === "seo") renderSeo();
   else renderRemodela();
 
   // medir o encaixe só faz sentido com o painel já visível
@@ -1604,6 +1767,20 @@ async function init() {
   carteiraBody.addEventListener("change", handleCarteiraEdit);
   carteiraBody.addEventListener("click", handleCarteiraClick);
 
+  document.getElementById("seo-search").addEventListener("input", (e) => {
+    STATE.seo.q = e.target.value.trim().toLowerCase();
+    renderSeo();
+  });
+  initChips("seo-chips-veredito", (v) => {
+    STATE.seo.veredito = v;
+    renderSeo();
+  });
+  initChips("seo-chips-tipo", (v) => {
+    STATE.seo.tipo = v;
+    renderSeo();
+  });
+  initSort("panel-seo", "seo", renderSeo);
+
   initSort("panel-carteira", "carteira", renderCarteira);
   initSort("panel-assoc", "assoc", renderAssoc);
   initSort("panel-evento", "evento", renderEvento);
@@ -1628,6 +1805,7 @@ async function init() {
   renderEvento();
   renderRemodela();
   renderCarteira();
+  renderSeo();
 
   let saved = null;
   try {

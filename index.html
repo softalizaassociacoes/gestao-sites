@@ -52,6 +52,11 @@
           <span class="nav-text">Associações</span>
           <span class="nav-count" id="count-carteira">0</span>
         </button>
+        <button class="nav-item" data-tab="seo" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8.5 11.5l2 2 3.5-4"/></svg>
+          <span class="nav-text">SEOs</span>
+          <span class="nav-count" id="count-seo">0</span>
+        </button>
       </nav>
 
       <div class="rail-foot">
@@ -281,6 +286,57 @@
               </table>
             </div>
           </div>
+        </section>
+
+        <!-- ======================================================= SEO -->
+        <section id="panel-seo" class="panel">
+          <div class="metrics" id="seo-metrics"></div>
+          <div class="comp-grid" id="seo-composition"></div>
+
+          <div class="filters">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="seo-search" placeholder="Buscar por sigla, evento ou endereço…" autocomplete="off" />
+              <kbd>/</kbd>
+            </div>
+            <div class="chips" id="seo-chips-veredito" role="group" aria-label="Filtrar por situação">
+              <button class="chip on" data-value="" type="button">Tudo</button>
+              <button class="chip" data-value="problema" type="button"><span class="chip-dot d-risk"></span>Problema</button>
+              <button class="chip" data-value="atencao" type="button"><span class="chip-dot d-warn"></span>Atenção</button>
+              <button class="chip" data-value="aviso" type="button"><span class="chip-dot d-warn"></span>Ajustes</button>
+              <button class="chip" data-value="ok" type="button"><span class="chip-dot d-ok"></span>OK</button>
+            </div>
+            <div class="chips" id="seo-chips-tipo" role="group" aria-label="Filtrar por tipo">
+              <button class="chip on" data-value="" type="button">Todos</button>
+              <button class="chip" data-value="associacao" type="button">Associações</button>
+              <button class="chip" data-value="evento" type="button">Eventos</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Auditoria de SEO</h2>
+              <span class="count" id="seo-count"></span>
+              <span class="spacer"></span>
+              <div class="progress-inline" id="seo-progress"></div>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="sortable" data-sort="rotulo">Site <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="veredito">Situação <span class="arrow"></span></th>
+                    <th>Indexável</th>
+                    <th>Sinais</th>
+                    <th>O que corrigir</th>
+                  </tr>
+                </thead>
+                <tbody id="seo-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <p class="seo-nota" id="seo-nota"></p>
         </section>
       </div>
     </div>

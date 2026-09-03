@@ -998,6 +998,56 @@ tr.skip:hover .linkcell { opacity: 1; }
 
 .muted { color: var(--text-3); }
 
+/* ------------------------------------------------------------------- SEO */
+
+.seo-nome { font-size: 13px; font-weight: 660; letter-spacing: -0.012em; }
+.seo-url {
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+  text-decoration: none;
+}
+.seo-url:hover { color: var(--accent); text-decoration: underline; }
+.seo-tipo { margin-top: 4px; font-size: 10.5px; color: var(--text-3); letter-spacing: 0.03em; }
+
+/* os cinco sinais principais, em pílulas de uma letra */
+.sinais { display: flex; gap: 3px; }
+.sinal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--r-xs);
+  border: 1px solid transparent;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: default;
+}
+.sinal.s-sim { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+.sinal.s-nao { background: var(--off-soft); color: var(--text-3); border-color: var(--off-line); }
+
+.achados { display: flex; flex-wrap: wrap; gap: 4px; max-width: 42ch; }
+.achado {
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--r-xs);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.45;
+}
+.achado.a-erro { background: var(--risk-soft); color: var(--risk); border-color: var(--risk-line); }
+.achado.a-aviso { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
+
+.seo-nota {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+  max-width: 90ch;
+}
+.seo-nota strong { color: var(--text-2); font-weight: 620; }
+
 /* ------------------------------------------------------------ estado vazio */
 
 .empty {
