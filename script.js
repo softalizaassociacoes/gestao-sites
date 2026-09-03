@@ -228,7 +228,7 @@ const PAGES = {
   seo: {
     title: "SEOs",
     sub: "Indexabilidade e SEO on-page dos sites no ar — associações e eventos ativos.",
-    add: "Nova associação",
+    add: "Novo SEO",
   },
   remodela: {
     title: "Remodelar",
@@ -504,6 +504,24 @@ const ADD_FORMS = {
     ],
     submit: (v) => criarAssociacao(v, false),
   },
+  seo: {
+    title: "Novo SEO",
+    sub: "Um site para acompanhar aqui. Fica só nesta aba — não entra em Sites, Eventos nem Associações.",
+    fields: [
+      { name: "rotulo", label: "Nome do site", ph: "ex.: ABC ou Congresso Brasileiro de…", required: true },
+      { name: "url", label: "Endereço", ph: "ex.: abc.org.br", required: true },
+      { name: "sigla", label: "Sigla", ph: "Opcional", hint: "Vira o termo da coluna Pesquisa. Sem ela, entra o nome do site." },
+      {
+        name: "tipo",
+        label: "Tipo",
+        options: [
+          { value: "associacao", label: "Associação" },
+          { value: "evento", label: "Evento" },
+        ],
+      },
+    ],
+    submit: (v) => criarSeo(v),
+  },
   remodela: {
     title: "Adicionar à remodelação",
     sub: "Marca a associação como site conosco. Se a sigla já existir, ela é reaproveitada.",
@@ -551,6 +569,43 @@ function criarAssociacao(v, comoSite) {
   return { message: comoSite ? `"${v.sigla}" entrou na aba Remodelar.` : `"${v.sigla}" adicionada.` };
 }
 
+// Registro de SEO criado à mão: vive só nesta aba, sem associação nem evento
+// por trás. Nasce sem varredura, então os campos da auditoria ficam vazios e a
+// situação começa em "SEO Configurando", para o usuário ajustar.
+function criarSeo(v) {
+  const url = v.url.trim();
+  const tipo = v.tipo === "evento" ? "evento" : "associacao";
+  const jaTem = SEO.find((r) => !r.removido && displayLink(r.url) === displayLink(url));
+  if (jaTem) return { error: `"${jaTem.rotulo}" já acompanha esse endereço.` };
+
+  const chave = novaChave("seo");
+  const r = {
+    seoId: `${tipo}:${chave}`,
+    chave,
+    tipo,
+    rotulo: v.rotulo,
+    sigla: v.sigla || null,
+    url,
+    statusEvento: tipo === "evento" ? "a_acontecer" : null,
+    encontravel: "fraco",
+    indexado: false,
+    titulo: null,
+    urlFinal: null,
+    auditadoEm: null,
+    pesquisa: v.sigla || v.rotulo,
+    removido: false,
+    manual: true,
+    lacunas: [],
+    problemas: [],
+    avisos: [],
+  };
+
+  SEO.push(r);
+  salvarSeo(r);
+  renderSeo();
+  return { message: `"${r.rotulo}" entrou na aba SEOs.` };
+}
+
 function openAddDialog() {
   const cfg = ADD_FORMS[STATE.tab];
   const dlg = document.getElementById("dlg-add");
@@ -560,17 +615,23 @@ function openAddDialog() {
   document.getElementById("dlg-add-sub").textContent = cfg.sub;
   body.innerHTML =
     cfg.fields
-      .map(
-        (f) => `<div class="field">
+      .map((f) => {
+        const controle =
+          f.options
+            ? `<select id="add-${f.name}" name="${f.name}">${f.options
+                .map((o) => `<option value="${o.value}">${o.label}</option>`)
+                .join("")}</select>`
+            : `<input type="text" id="add-${f.name}" name="${f.name}" placeholder="${esc(f.ph || "")}" autocomplete="off" />`;
+        return `<div class="field">
           <label for="add-${f.name}">${f.label}</label>
-          <input type="text" id="add-${f.name}" name="${f.name}" placeholder="${esc(f.ph || "")}" autocomplete="off" />
+          ${controle}
           ${f.hint ? `<div class="hint">${f.hint}</div>` : ""}
-        </div>`
-      )
+        </div>`;
+      })
       .join("") + '<div class="modal-error" id="dlg-add-error"></div>';
 
   dlg.showModal();
-  const first = body.querySelector("input");
+  const first = body.querySelector("input, select");
   if (first) first.focus();
 }
 
@@ -1003,7 +1064,8 @@ function renderSeoTable(list) {
   tbody.innerHTML = list
     .map((r) => {
       const k = `data-seo="${esc(r.seoId)}"`;
-      const sub = r.tipo === "evento" ? `evento · ${STATUS_EVENTO_LABEL[r.statusEvento] || "—"}` : "associação";
+      const base = r.tipo === "evento" ? `evento · ${STATUS_EVENTO_LABEL[r.statusEvento] || "—"}` : "associação";
+      const sub = r.manual ? `${base} · fora da varredura` : base;
 
       return `<tr>
         <td class="ident-td" data-l="Site">
@@ -1067,7 +1129,7 @@ function renderSeo() {
   document.getElementById("seo-count").textContent =
     sorted.length === totalSeo ? `${totalSeo} no total` : `${sorted.length} de ${totalSeo}`;
 
-  const data = SEO.length ? SEO[0].auditadoEm : null;
+  const data = (SEO.find((r) => r.auditadoEm) || {}).auditadoEm || null;
   document.getElementById("seo-nota").innerHTML = data
     ? `Varredura de <strong>${data}</strong> nos endereços da aba Sites e nos eventos a acontecer ou acontecendo. A coluna <strong>Na busca</strong> começa com o resultado automático — se a página permite ser indexada e se a sigla e o nome estão no título, H1 e meta description — e você pode corrigir à mão. <strong>Indexado?</strong> é marcação sua, para registrar o que já conferiu na busca de verdade. <strong>Pesquisa</strong> guarda o termo usado nessa conferência: começa com a sigla da associação e você pode trocar.`
     : "";
