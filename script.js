@@ -9,6 +9,7 @@
 const API = "/api/dados";
 const CACHE_ASSOC = "gestaoSitesCacheAssoc";
 const CACHE_EVENTO = "gestaoSitesCacheEventos";
+const CACHE_SEO = "gestaoSitesCacheSeo";
 const TAB_KEY = "gestaoSitesTab";
 const THEME_KEY = "gestaoSitesTheme";
 
@@ -20,6 +21,7 @@ const currency = new Intl.NumberFormat("pt-BR", {
 
 let ASSOCIACOES = [];
 let EVENTOS = [];
+let SEO = [];
 
 const BANCO = { ativo: false, fila: new Map(), timer: null, enviando: false };
 
@@ -33,6 +35,13 @@ function semearAssociacoes() {
 
 function semearEventos() {
   return EVENTOS_BASE.map((e) => ({ ...e, removido: false }));
+}
+
+// tipo + chave porque uma sigla de associação e um id de evento vivem na mesma
+// tabela; "indexado" é marcação manual, o resto vem da varredura
+function semearSeo() {
+  const base = typeof SEO_BASE !== "undefined" ? SEO_BASE : [];
+  return base.map((r) => ({ ...r, seoId: `${r.tipo}:${r.chave}`, indexado: !!r.indexado }));
 }
 
 // Acrescenta à lista os registros da base que ainda não existem nela, casando
@@ -58,6 +67,7 @@ function gravarCache() {
   try {
     localStorage.setItem(CACHE_ASSOC, JSON.stringify(ASSOCIACOES));
     localStorage.setItem(CACHE_EVENTO, JSON.stringify(EVENTOS));
+    localStorage.setItem(CACHE_SEO, JSON.stringify(SEO));
   } catch (e) {
     /* cota estourada ou modo privado — o banco continua sendo a verdade */
   }
@@ -78,7 +88,7 @@ function marcarSincronia(texto, classe) {
 function enfileirar(tipo, registro) {
   gravarCache();
   if (!BANCO.ativo) return;
-  BANCO.fila.set(`${tipo}:${registro.chave || registro.id}`, { tipo, registro });
+  BANCO.fila.set(`${tipo}:${registro.seoId || registro.chave || registro.id}`, { tipo, registro });
   clearTimeout(BANCO.timer);
   BANCO.timer = setTimeout(descarregarFila, 900);
 }
@@ -115,7 +125,7 @@ async function semearBanco() {
     const r = await fetch(API, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ associacoes: ASSOCIACOES, eventos: EVENTOS }),
+      body: JSON.stringify({ associacoes: ASSOCIACOES, eventos: EVENTOS, seo: SEO }),
     });
     if (!r.ok) {
       const corpo = await r.json().catch(() => ({}));
@@ -157,6 +167,10 @@ function salvarAssoc(a) {
 
 function salvarEvento(e) {
   enfileirar("evento", e);
+}
+
+function salvarSeo(r) {
+  enfileirar("seo", r);
 }
 
 function novaChave(prefixo) {
@@ -904,14 +918,19 @@ async function handleCarteiraClick(ev) {
 // on-page; não mede se o Google já indexou, o que exigiria o Search Console.
 // ---------------------------------------------------------------------------
 
-const SEO = typeof SEO_BASE !== "undefined" ? SEO_BASE : [];
-
 const ENCONTRAVEL_META = {
   forte: { label: "Aparece bem", cls: "b-ok", ordem: 0 },
   provavel: { label: "Deve aparecer", cls: "b-accent", ordem: 1 },
   fraco: { label: "Difícil de achar", cls: "b-warn", ordem: 2 },
   nao: { label: "Não aparece", cls: "b-risk", ordem: 3 },
 };
+
+const ENCONTRAVEL_OPTIONS = [
+  { value: "forte", label: "Aparece bem" },
+  { value: "provavel", label: "Deve aparecer" },
+  { value: "fraco", label: "Difícil de achar" },
+  { value: "nao", label: "Não aparece" },
+];
 
 const STATUS_EVENTO_LABEL = {
   a_acontecer: "a acontecer",
@@ -925,6 +944,7 @@ function renderSeoMetrics(list) {
   const bem = cont("forte") + cont("provavel");
   const nao = cont("nao");
   const eventos = list.filter((r) => r.tipo === "evento").length;
+  const indexados = list.filter((r) => r.indexado).length;
 
   document.getElementById("seo-metrics").innerHTML = metricsHtml([
     {
@@ -934,12 +954,7 @@ function renderSeoMetrics(list) {
     },
     { label: "Devem aparecer", value: bem, dot: "d-ok", note: `${pct(bem, total)}% do total` },
     { label: "Não aparecem", value: nao, dot: "d-risk", note: "Bloqueados, fora do ar ou atrás de login" },
-    {
-      label: "Sigla no título",
-      value: list.filter((r) => r.siglaNoTitulo).length,
-      dot: "d-accent",
-      note: "O sinal que mais pesa na busca pela sigla",
-    },
+    { label: "Marcados como indexados", value: indexados, dot: "d-accent", note: `${total - indexados} ainda por conferir` },
   ]);
 
   document.getElementById("seo-composition").innerHTML =
@@ -949,35 +964,28 @@ function renderSeoMetrics(list) {
       { cls: "s-warn", label: "Difícil de achar", count: cont("fraco") },
       { cls: "s-risk", label: "Não aparece", count: nao },
     ]) +
-    compositionHtml("Por que não aparece", [
-      { cls: "s-risk", label: "Pede noindex", count: list.filter((r) => r.problemas.some((p) => /noindex|robots\.txt/.test(p))).length },
-      { cls: "s-warn", label: "Atrás de login", count: list.filter((r) => r.problemas.some((p) => /login/.test(p))).length },
-      { cls: "s-off", label: "Fora do ar", count: list.filter((r) => r.problemas.some((p) => /fora do ar/.test(p))).length },
+    compositionHtml("Conferência de indexação", [
+      { cls: "s-ok", label: "Indexado", count: indexados },
+      { cls: "s-off", label: "Por conferir", count: total - indexados },
     ]);
 
   const prog = document.getElementById("seo-progress");
   prog.innerHTML = total
-    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(bem, total)}%"></div></div>
-       <span>${bem}/${total} devem aparecer</span>`
+    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(indexados, total)}%"></div></div>
+       <span>${indexados}/${total} conferidos</span>`
     : "";
 }
 
 function renderSeoTable(list) {
   const tbody = document.getElementById("seo-table-body");
   if (!list.length) {
-    tbody.innerHTML = emptyRow(5, "Nada por aqui", "Nenhum site bate com esses filtros.");
+    tbody.innerHTML = emptyRow(4, "Nada por aqui", "Nenhum site bate com esses filtros.");
     return;
   }
 
   tbody.innerHTML = list
     .map((r) => {
-      const meta = ENCONTRAVEL_META[r.encontravel] || ENCONTRAVEL_META.fraco;
-      // quem não aparece: o motivo é o bloqueio; quem aparece: o que falta afinar
-      const motivos = r.encontravel === "nao" ? r.problemas : r.lacunas;
-      const classe = r.encontravel === "nao" ? "a-erro" : "a-aviso";
-      const achados = motivos.length
-        ? motivos.map((m) => `<span class="achado ${classe}">${esc(m)}</span>`).join("")
-        : '<span class="muted">Nada a ajustar</span>';
+      const k = `data-seo="${esc(r.seoId)}"`;
       const sub = r.tipo === "evento" ? `evento · ${STATUS_EVENTO_LABEL[r.statusEvento] || "—"}` : "associação";
 
       return `<tr>
@@ -991,17 +999,14 @@ function renderSeoTable(list) {
           </div>
         </td>
         <td data-l="Na busca">
-          <span class="badge ${meta.cls}"><i></i>${meta.label}</span>
+          ${selectField(`nv-select enc-${r.encontravel} seo-encontravel`, k, r.encontravel, ENCONTRAVEL_OPTIONS)}
           <div class="seo-tipo">${sub}</div>
         </td>
-        <td class="center" data-l="Sigla no título">
-          <span class="badge ${r.siglaNoTitulo ? "b-ok" : "b-none"}">${r.siglaNoTitulo ? "Sim" : "Não"}</span>
-        </td>
+        <td class="center" data-l="Indexado?">${switchField("seo-indexado", k, r.indexado)}</td>
         <td data-l="Título da página">
-          <div class="seo-titulo" title="${esc(r.titulo || '')}">${r.titulo ? esc(r.titulo) : '<span class="muted">sem título</span>'}</div>
+          <div class="seo-titulo" title="${esc(r.titulo || "")}">${r.titulo ? esc(r.titulo) : '<span class="muted">sem título</span>'}</div>
           ${r.urlFinal ? `<div class="seo-redir" title="${esc(r.urlFinal)}">vai para ${esc(displayLink(r.urlFinal))}</div>` : ""}
         </td>
-        <td data-l="O que falta"><div class="achados">${achados}</div></td>
       </tr>`;
     })
     .join("");
@@ -1038,9 +1043,31 @@ function renderSeo() {
 
   const data = SEO.length ? SEO[0].auditadoEm : null;
   document.getElementById("seo-nota").innerHTML = data
-    ? `Varredura de <strong>${data}</strong> nos endereços da aba Sites e nos eventos a acontecer ou acontecendo. Responde se o site <strong>tende a aparecer</strong> ao buscar pela sigla ou pelo nome, medindo duas coisas verificáveis: se a página permite ser indexada, e se a sigla e o nome estão onde o buscador lê — título, H1 e meta description. <strong>Não é a posição real no Google</strong>: para isso é preciso o Search Console ou a Custom Search API.`
+    ? `Varredura de <strong>${data}</strong> nos endereços da aba Sites e nos eventos a acontecer ou acontecendo. A coluna <strong>Na busca</strong> começa com o resultado automático — se a página permite ser indexada e se a sigla e o nome estão no título, H1 e meta description — e você pode corrigir à mão. <strong>Indexado?</strong> é marcação sua, para registrar o que já conferiu na busca de verdade.`
     : "";
   renderNavCounts();
+}
+
+function handleSeoEdit(ev) {
+  const el = ev.target;
+  const id = el.dataset.seo;
+  if (!id) return;
+  const r = SEO.find((x) => x.seoId === id);
+  if (!r) return;
+
+  if (el.classList.contains("seo-encontravel")) {
+    r.encontravel = el.value;
+    salvarSeo(r);
+    renderSeo();
+    return;
+  }
+
+  if (el.classList.contains("seo-indexado")) {
+    r.indexado = el.checked;
+    salvarSeo(r);
+    renderSeo();
+    toast(el.checked ? `"${r.rotulo}" marcado como indexado.` : `"${r.rotulo}" desmarcado.`, "info");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1445,7 +1472,7 @@ function exportCsv() {
     ]);
   } else if (STATE.tab === "seo") {
     name = "seo.csv";
-    head = ["Site", "Sigla", "Tipo", "Status do evento", "Endereço", "Na busca", "Sigla no título", "Título", "O que falta"];
+    head = ["Site", "Sigla", "Tipo", "Status do evento", "Endereço", "Na busca", "Indexado", "Título", "O que falta"];
     rows = VIEW.seo.map((r) => [
       r.rotulo,
       r.sigla || "",
@@ -1453,7 +1480,7 @@ function exportCsv() {
       r.statusEvento || "",
       r.url,
       (ENCONTRAVEL_META[r.encontravel] || {}).label || r.encontravel,
-      r.siglaNoTitulo ? "sim" : "não",
+      r.indexado ? "sim" : "não",
       r.titulo || "",
       (r.encontravel === "nao" ? r.problemas : r.lacunas).join(" | "),
     ]);
@@ -1664,18 +1691,22 @@ async function carregarModelo() {
   const remoto = await carregarDoBanco();
   const chaveA = (a) => a.chave;
   const chaveE = (e) => e.id;
+  const chaveS = (r) => r.seoId;
 
-  if (remoto && remoto.associacoes.length) {
+  // basta qualquer uma das listas ter conteúdo para o banco mandar
+  if (remoto && (remoto.associacoes.length || (remoto.eventos || []).length || (remoto.seo || []).length)) {
     // o banco manda, mas o que entrou na base depois dele precisa ser somado
     const a = completarComBase(remoto.associacoes, semearAssociacoes(), chaveA);
     const e = completarComBase(remoto.eventos, semearEventos(), chaveE);
+    const seo = completarComBase(remoto.seo || [], semearSeo(), chaveS);
     ASSOCIACOES = a.lista;
     EVENTOS = e.lista;
+    SEO = seo.lista;
     gravarCache();
 
-    if (a.novos.length || e.novos.length) {
+    if (a.novos.length || e.novos.length || seo.novos.length) {
       marcarSincronia("Salvo no banco", "s-ok");
-      await enviarNovos(a.novos, e.novos);
+      await enviarNovos(a.novos, e.novos, seo.novos);
     } else {
       marcarSincronia("Salvo no banco", "s-ok");
     }
@@ -1685,8 +1716,10 @@ async function carregarModelo() {
   // banco vazio ou indisponível: parte do espelho local, também completado
   const cacheA = lerCache(CACHE_ASSOC);
   const cacheE = lerCache(CACHE_EVENTO);
+  const cacheS = lerCache(CACHE_SEO);
   ASSOCIACOES = cacheA ? completarComBase(cacheA, semearAssociacoes(), chaveA).lista : semearAssociacoes();
   EVENTOS = cacheE ? completarComBase(cacheE, semearEventos(), chaveE).lista : semearEventos();
+  SEO = cacheS ? completarComBase(cacheS, semearSeo(), chaveS).lista : semearSeo();
   gravarCache();
 
   if (BANCO.ativo) await semearBanco();
@@ -1694,13 +1727,13 @@ async function carregarModelo() {
 }
 
 // grava no banco os registros novos vindos da base
-async function enviarNovos(associacoes, eventos) {
-  if (!BANCO.ativo || (!associacoes.length && !eventos.length)) return;
+async function enviarNovos(associacoes, eventos, seo) {
+  if (!BANCO.ativo || (!associacoes.length && !eventos.length && !(seo || []).length)) return;
   try {
     await fetch(API, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ associacoes, eventos }),
+      body: JSON.stringify({ associacoes, eventos, seo: seo || [] }),
     });
   } catch (e) {
     marcarSincronia("Falha ao salvar", "s-erro");
@@ -1788,6 +1821,9 @@ async function init() {
     STATE.seo.statusEvento = v;
     renderSeo();
   });
+  const seoBody = document.getElementById("seo-table-body");
+  seoBody.addEventListener("change", handleSeoEdit);
+
   initSort("panel-seo", "seo", renderSeo);
 
   initSort("panel-carteira", "carteira", renderCarteira);

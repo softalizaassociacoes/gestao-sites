@@ -977,6 +977,16 @@ select.nv-select {
   font-weight: 620;
 }
 
+select.enc-forte { background-color: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+select.enc-provavel { background-color: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+select.enc-fraco { background-color: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
+select.enc-nao { background-color: var(--risk-soft); color: var(--risk); border-color: var(--risk-line); }
+select.enc-forte:hover, select.enc-forte:focus { background-color: var(--ok-soft); }
+select.enc-provavel:hover, select.enc-provavel:focus { background-color: var(--accent-soft); }
+select.enc-fraco:hover, select.enc-fraco:focus { background-color: var(--warn-soft); }
+select.enc-nao:hover, select.enc-nao:focus { background-color: var(--risk-soft); }
+select.seo-encontravel { min-width: 132px; }
+
 select.nv-feita { background-color: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
 select.nv-pendente { background-color: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
 select.nv-nao { background-color: var(--risk-soft); color: var(--risk); border-color: var(--risk-line); }
