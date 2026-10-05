@@ -48,6 +48,7 @@ function semearSeo() {
     // a busca padrão é a sigla da associação; o usuário pode ajustar na tabela
     pesquisa: r.pesquisa || r.sigla || r.rotulo || "",
     removido: false,
+    encontravelManual: false,
   }));
 }
 
@@ -69,6 +70,35 @@ function completarComBase(lista, base, chaveDe) {
   const vistos = new Set(lista.map(chaveDe));
   const novos = base.filter((r) => !vistos.has(chaveDe(r)));
   return { lista: novos.length ? [...lista, ...novos] : lista, novos };
+}
+
+// A varredura é refeita de tempos em tempos e a semente vem com data nova. Aqui
+// os campos medidos são atualizados, mas o que é seu — a marcação de indexado e
+// uma correção manual de "na busca" — permanece.
+function mesclarSeoComBase(lista, base) {
+  const porId = new Map(base.map((b) => [b.seoId, b]));
+  const atualizados = [];
+
+  const mesclada = lista.map((r) => {
+    const b = porId.get(r.seoId);
+    // registro criado à mão não tem par na semente e nunca é tocado aqui
+    if (!b || !b.auditadoEm || b.auditadoEm <= (r.auditadoEm || "")) return r;
+    atualizados.push(b.seoId);
+    return {
+      ...b,
+      // tudo que é do usuário sobrevive à varredura nova
+      indexado: !!r.indexado,
+      pesquisa: r.pesquisa,
+      removido: !!r.removido,
+      manual: !!r.manual,
+      encontravelManual: !!r.encontravelManual,
+      encontravel: r.encontravelManual ? r.encontravel : b.encontravel,
+    };
+  });
+
+  const vistos = new Set(lista.map((r) => r.seoId));
+  const novos = base.filter((b) => !vistos.has(b.seoId));
+  return { lista: [...mesclada, ...novos], novos, atualizados: atualizados.length };
 }
 
 function lerCache(chave) {
@@ -1145,6 +1175,7 @@ function handleSeoEdit(ev) {
 
   if (el.classList.contains("seo-encontravel")) {
     r.encontravel = el.value;
+    r.encontravelManual = true;
     salvarSeo(r);
     renderSeo();
     return;
@@ -1812,15 +1843,16 @@ async function carregarModelo() {
     // o banco manda, mas o que entrou na base depois dele precisa ser somado
     const a = completarComBase(remoto.associacoes, semearAssociacoes(), chaveA);
     const e = completarComBase(remoto.eventos, semearEventos(), chaveE);
-    const seo = completarComBase(remoto.seo || [], semearSeo(), chaveS);
+    const seo = mesclarSeoComBase(remoto.seo || [], semearSeo());
     ASSOCIACOES = a.lista;
     EVENTOS = e.lista;
     SEO = normalizarSeo(seo.lista);
     gravarCache();
 
-    if (a.novos.length || e.novos.length || seo.novos.length) {
+    if (a.novos.length || e.novos.length || seo.novos.length || seo.atualizados) {
       marcarSincronia("Salvo no banco", "s-ok");
-      await enviarNovos(a.novos, e.novos, seo.novos);
+      // varredura nova precisa subir inteira, não só as linhas inéditas
+      await enviarNovos(a.novos, e.novos, seo.atualizados ? SEO : seo.novos);
     } else {
       marcarSincronia("Salvo no banco", "s-ok");
     }
@@ -1833,7 +1865,7 @@ async function carregarModelo() {
   const cacheS = lerCache(CACHE_SEO);
   ASSOCIACOES = cacheA ? completarComBase(cacheA, semearAssociacoes(), chaveA).lista : semearAssociacoes();
   EVENTOS = cacheE ? completarComBase(cacheE, semearEventos(), chaveE).lista : semearEventos();
-  SEO = normalizarSeo(cacheS ? completarComBase(cacheS, semearSeo(), chaveS).lista : semearSeo());
+  SEO = normalizarSeo(cacheS ? mesclarSeoComBase(cacheS, semearSeo()).lista : semearSeo());
   gravarCache();
 
   if (BANCO.ativo) await semearBanco();

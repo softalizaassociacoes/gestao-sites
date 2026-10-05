@@ -2,7 +2,7 @@
 // Busca cada endereço, extrai os sinais de SEO da página e checa robots.txt e
 // sitemap. Não mede indexação real no Google — isso exige Search Console.
 
-const fs = require("fs");
+import fs from "node:fs";
 
 const ALVOS = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const SAIDA = process.argv[3];
