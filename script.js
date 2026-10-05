@@ -58,11 +58,16 @@ function semearSeo() {
 // aba Associações continuar com 56 em vez de 168.
 // registros gravados antes da coluna Pesquisa chegam sem ela; a sigla é o
 // ponto de partida natural da busca
+const ehSoftaliza = (u) => /(^|\/\/|\.)softaliza\.com\.br/i.test(u || "");
+
 function normalizarSeo(lista) {
   return lista.map((r) => ({
     ...r,
     pesquisa: r.pesquisa != null && r.pesquisa !== "" ? r.pesquisa : r.sigla || r.rotulo || "",
     removido: !!r.removido,
+    // registros de deploys anteriores não trazem a regra do domínio
+    dominioSoftaliza: r.dominioSoftaliza != null ? !!r.dominioSoftaliza : ehSoftaliza(r.url) || ehSoftaliza(r.urlFinal),
+    conformidade: r.conformidade || (ehSoftaliza(r.url) || ehSoftaliza(r.urlFinal) ? "fechar" : "ok"),
   }));
 }
 
@@ -234,7 +239,7 @@ const STATE = {
   evento: { q: "", status: "", site: "", sort: { col: "nome", dir: "asc" } },
   remodela: { q: "", nv: "", origem: "" },
   carteira: { q: "", conosco: "", saude: "", sort: { col: "sigla", dir: "asc" } },
-  seo: { q: "", veredito: "", tipo: "", statusEvento: "", sort: { col: "veredito", dir: "asc" } },
+  seo: { q: "", veredito: "", tipo: "", statusEvento: "", conformidade: "", sort: { col: "veredito", dir: "asc" } },
 };
 
 const VIEW = { assoc: [], evento: [], remodela: [], carteira: [], seo: [] };
@@ -1046,6 +1051,25 @@ const STATUS_EVENTO_LABEL = {
   realizado: "realizado",
 };
 
+// Endereço em softaliza.com.br é provisório e deve pedir noindex, para não
+// disputar busca com o domínio próprio do cliente. Em domínio próprio vale o
+// contrário: tem que estar liberado.
+const CONFORMIDADE_META = {
+  ok: { label: "Correto", cls: "b-ok" },
+  fechar: { label: "Fechar", cls: "b-warn", dica: "endereço softaliza aberto — deveria pedir noindex" },
+  abrir: { label: "Liberar", cls: "b-risk", dica: "domínio próprio bloqueado — deveria indexar" },
+  "fora-do-ar": { label: "Fora do ar", cls: "b-none", dica: "não dá para avaliar" },
+};
+
+function conformidadeBadge(r) {
+  const meta = CONFORMIDADE_META[r.conformidade];
+  if (!meta) return '<span class="muted">—</span>';
+  const onde = r.dominioSoftaliza ? "softaliza.com.br" : "domínio próprio";
+  const titulo = meta.dica ? `${onde} · ${meta.dica}` : onde;
+  return `<span class="badge ${meta.cls}" title="${esc(titulo)}"><i></i>${meta.label}</span>
+    <div class="seo-tipo">${r.dominioSoftaliza ? "softaliza" : "próprio"}</div>`;
+}
+
 function renderSeoMetrics(list) {
   const total = list.length;
   const cont = (v) => list.filter((r) => r.encontravel === v).length;
@@ -1053,6 +1077,9 @@ function renderSeoMetrics(list) {
   const nao = cont("nao");
   const eventos = list.filter((r) => r.tipo === "evento").length;
   const indexados = list.filter((r) => r.indexado).length;
+  const fechar = list.filter((r) => r.conformidade === "fechar").length;
+  const abrir = list.filter((r) => r.conformidade === "abrir").length;
+  const foraDaRegra = fechar + abrir;
 
   document.getElementById("seo-metrics").innerHTML = metricsHtml([
     {
@@ -1062,7 +1089,7 @@ function renderSeoMetrics(list) {
     },
     { label: "SEO pronto ou bom", value: bem, dot: "d-ok", note: `${pct(bem, total)}% do total` },
     { label: "Sem SEO", value: nao, dot: "d-risk", note: "Bloqueados, fora do ar ou atrás de login" },
-    { label: "Marcados como indexados", value: indexados, dot: "d-accent", note: `${total - indexados} ainda por conferir` },
+    { label: "Indexação fora da regra", value: foraDaRegra, dot: "d-warn", note: `${fechar} a fechar, ${abrir} a liberar` },
   ]);
 
   document.getElementById("seo-composition").innerHTML =
@@ -1072,9 +1099,11 @@ function renderSeoMetrics(list) {
       { cls: "s-warn", label: "SEO Configurando", count: cont("fraco") },
       { cls: "s-risk", label: "Sem SEO", count: nao },
     ]) +
-    compositionHtml("Conferência de indexação", [
-      { cls: "s-ok", label: "Indexado", count: indexados },
-      { cls: "s-off", label: "Por conferir", count: total - indexados },
+    compositionHtml("Indexação pela regra do domínio", [
+      { cls: "s-ok", label: "Correto", count: list.filter((r) => r.conformidade === "ok").length },
+      { cls: "s-warn", label: "Fechar (softaliza aberto)", count: fechar },
+      { cls: "s-risk", label: "Liberar (próprio bloqueado)", count: abrir },
+      { cls: "s-off", label: "Fora do ar", count: list.filter((r) => r.conformidade === "fora-do-ar").length },
     ]);
 
   const prog = document.getElementById("seo-progress");
@@ -1112,6 +1141,7 @@ function renderSeoTable(list) {
           <div class="seo-tipo">${sub}</div>
         </td>
         <td class="center" data-l="Indexado?">${switchField("seo-indexado", k, r.indexado)}</td>
+        <td data-l="Indexação">${conformidadeBadge(r)}</td>
         <td data-l="Pesquisa">
           <input class="f seo-pesquisa" type="text" ${k} value="${esc(r.pesquisa || "")}" placeholder="Sigla da associação" />
           ${r.urlFinal ? `<div class="seo-redir" title="${esc(r.urlFinal)}">vai para ${esc(displayLink(r.urlFinal))}</div>` : ""}
@@ -1136,6 +1166,7 @@ function renderSeo() {
     if (s.veredito && r.encontravel !== s.veredito) return false;
     if (s.tipo && r.tipo !== s.tipo) return false;
     if (s.statusEvento && r.statusEvento !== s.statusEvento) return false;
+    if (s.conformidade && r.conformidade !== s.conformidade) return false;
     return true;
   });
 
@@ -1617,7 +1648,7 @@ function exportCsv() {
     ]);
   } else if (STATE.tab === "seo") {
     name = "seo.csv";
-    head = ["Site", "Sigla", "Tipo", "Status do evento", "Endereço", "Na busca", "Indexado", "Pesquisa", "O que falta"];
+    head = ["Site", "Sigla", "Tipo", "Status do evento", "Endereço", "Na busca", "Indexado", "Indexação", "Domínio", "Pesquisa", "O que falta"];
     rows = VIEW.seo.map((r) => [
       r.rotulo,
       r.sigla || "",
@@ -1626,6 +1657,8 @@ function exportCsv() {
       r.url,
       (ENCONTRAVEL_META[r.encontravel] || {}).label || r.encontravel,
       r.indexado ? "sim" : "não",
+      (CONFORMIDADE_META[r.conformidade] || {}).label || "",
+      r.dominioSoftaliza ? "softaliza" : "próprio",
       r.pesquisa || "",
       (r.encontravel === "nao" ? r.problemas : r.lacunas).join(" | "),
     ]);
@@ -1971,6 +2004,10 @@ async function init() {
   seoBody.addEventListener("change", handleSeoEdit);
   seoBody.addEventListener("click", handleSeoClick);
 
+  initChips("seo-chips-conformidade", (v) => {
+    STATE.seo.conformidade = v;
+    renderSeo();
+  });
   initSort("panel-seo", "seo", renderSeo);
 
   initSort("panel-carteira", "carteira", renderCarteira);

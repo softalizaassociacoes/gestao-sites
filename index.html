@@ -311,6 +311,12 @@
               <button class="chip" data-value="associacao" type="button">Associações</button>
               <button class="chip" data-value="evento" type="button">Eventos</button>
             </div>
+            <div class="chips" id="seo-chips-conformidade" role="group" aria-label="Filtrar por indexação">
+              <button class="chip on" data-value="" type="button">Toda indexação</button>
+              <button class="chip" data-value="fechar" type="button"><span class="chip-dot d-warn"></span>Fechar</button>
+              <button class="chip" data-value="abrir" type="button"><span class="chip-dot d-risk"></span>Liberar</button>
+              <button class="chip" data-value="ok" type="button"><span class="chip-dot d-ok"></span>Correto</button>
+            </div>
             <div class="chips" id="seo-chips-status" role="group" aria-label="Filtrar por status do evento">
               <button class="chip on" data-value="" type="button">Todo status</button>
               <button class="chip" data-value="a_acontecer" type="button">A acontecer</button>
@@ -332,6 +338,7 @@
                     <th class="sortable" data-sort="rotulo">Site <span class="arrow"></span></th>
                     <th class="sortable" data-sort="veredito">Na busca <span class="arrow"></span></th>
                     <th>Indexado?</th>
+                    <th>Indexação</th>
                     <th>Pesquisa</th>
                     <th></th>
                   </tr>

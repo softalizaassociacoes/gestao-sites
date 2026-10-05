@@ -126,9 +126,21 @@ async function auditar(alvo) {
 
 // --- veredito ------------------------------------------------------------
 
+// Endereço em softaliza.com.br é temporário: deve pedir noindex para não
+// competir com o domínio próprio do cliente. Em domínio próprio é o contrário —
+// tem que estar liberado.
+const ehSoftaliza = (u) => /(^|\/\/|\.)softaliza\.com\.br/i.test(u || "");
+
 function avaliar(r) {
   const problemas = [];
   const avisos = [];
+
+  r.dominioSoftaliza = ehSoftaliza(r.url) || ehSoftaliza(r.urlFinal);
+  const bloqueado = !!(r.noindex || r.robotsBloqueiaTudo || r.atrasDeLogin);
+
+  if (r.erro && !r.bloqueadoPorWaf) r.conformidade = "fora-do-ar";
+  else if (r.dominioSoftaliza) r.conformidade = bloqueado ? "ok" : "fechar";
+  else r.conformidade = bloqueado ? "abrir" : "ok";
 
   if (r.bloqueadoPorWaf) {
     avisos.push("servidor devolve 403 para robôs — verificar se o Google também é bloqueado");
@@ -136,10 +148,14 @@ function avaliar(r) {
     problemas.push(`fora do ar ou inacessível (${r.erro})`);
   }
   if (!r.erro) {
-    if (r.atrasDeLogin) problemas.push("redireciona para tela de login — buscador não vê o conteúdo");
-    if (r.noindex) problemas.push("meta robots com noindex — pede para não indexar");
+    if (r.conformidade === "fechar") {
+      avisos.push("endereço softaliza.com.br aberto à indexação — deveria pedir noindex");
+    }
+    // em softaliza.com.br o bloqueio é o esperado, então não conta como falha
+    if (r.atrasDeLogin && !r.dominioSoftaliza) problemas.push("redireciona para tela de login — buscador não vê o conteúdo");
+    if (r.noindex && !r.dominioSoftaliza) problemas.push("meta robots com noindex — pede para não indexar");
     if (!r.titulo) problemas.push("sem <title>");
-    if (r.robotsBloqueiaTudo) problemas.push("robots.txt bloqueia o site inteiro");
+    if (r.robotsBloqueiaTudo && !r.dominioSoftaliza) problemas.push("robots.txt bloqueia o site inteiro");
 
     if (!r.https) problemas.push("não resolve em HTTPS");
     if (!r.descricao) avisos.push("sem meta description");
