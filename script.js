@@ -29,6 +29,11 @@ function semearSites() {
   return base.map(normalizarSite);
 }
 
+// Eventos não entram sozinhos na fila de remodelação. Estes dois já estavam
+// sendo remodelados quando a regra mudou, então começam enviados; o resto só
+// entra pelo botão de enviar, e a escolha gravada manda daí em diante.
+const SEMENTE_FILA_EVENTOS = new Set(["evento:unimed", "evento:porao-na-roda"]);
+
 // registro de deploy anterior pode não ter campo novo: tudo ganha padrão aqui
 function normalizarSite(s) {
   const seo = s.seo
@@ -72,6 +77,8 @@ function normalizarSite(s) {
     linkDefinitivo: !!s.linkDefinitivo,
     // tirado da fila de remodelação à mão; o site continua nas outras abas
     foraDaFila: !!s.foraDaFila,
+    // evento só entra na fila quando enviado à mão, pelo botão em Eventos
+    enviadoFila: s.enviadoFila != null ? !!s.enviadoFila : SEMENTE_FILA_EVENTOS.has(s.id),
     // marcações manuais por cima da varredura; null = vale o automático
     checagemManual: {
       ar: s.checagemManual && s.checagemManual.ar != null ? !!s.checagemManual.ar : null,
@@ -489,6 +496,7 @@ const ICON = {
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6"/></svg>',
   tirar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>',
+  enviar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h7M12 9l3 3-3 3"/></svg>',
   detail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
@@ -1002,7 +1010,7 @@ function handleSitesEdit(ev) {
   } else if (el.classList.contains("s-situacao")) {
     registrar(s, `Situação: ${SITUACAO_META[s.situacao].label} → ${SITUACAO_META[el.value].label}.`);
     s.situacao = el.value;
-    if (el.value === "remodelar" && s.foraDaFila) {
+    if (el.value === "remodelar" && s.foraDaFila && s.tipo !== "evento") {
       s.foraDaFila = false;
       registrar(s, "Devolvido à fila, pela situação voltar a Remodelar.");
     }
@@ -1117,6 +1125,11 @@ function renderEventosTable(list) {
         <td data-l="Endereço">${linkCell("e-url", k, s.url)}</td>
         <td data-l="Checagens">${checksHtml(s, k)}</td>
         <td class="actions" data-l="">
+          ${
+            s.enviadoFila
+              ? `<button class="mini ativo danger" type="button" data-act="fila" ${k} title="Na fila de remodelação — clique para tirar" aria-label="Tirar da fila de remodelação">${ICON.tirar}</button>`
+              : `<button class="mini" type="button" data-act="fila" ${k} title="Enviar para Remodelar" aria-label="Enviar para Remodelar">${ICON.enviar}</button>`
+          }
           <button class="mini" type="button" data-act="detail" ${k} title="Detalhes e histórico" aria-label="Detalhes">${ICON.detail}</button>
           <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
         </td>
@@ -1192,6 +1205,7 @@ async function handleEventosClick(ev) {
     if (btn.dataset.act === "open") return openLink(s.url);
     if (btn.dataset.act === "copy") return copyLink(s.url);
     if (btn.dataset.act === "detail") return openDrawer(s.id);
+    if (btn.dataset.act === "fila") return s.enviadoFila ? tirarDaFila(s) : enviarParaFila(s);
     if (btn.dataset.act === "del") return excluirSite(s);
     return;
   }
@@ -1204,7 +1218,10 @@ async function handleEventosClick(ev) {
 // Aba: Remodelar
 // ---------------------------------------------------------------------------
 
-const fila = () => ativos().filter((s) => !s.foraDaFila && (s.situacao === "remodelar" || s.novaVersao === "validacao" || s.novaVersao === "migrado"));
+// Sites de associação entram pela própria situação, para Sites e Remodelar
+// contarem a mesma coisa. Evento só entra se foi enviado à mão.
+const naFila = (s) => (s.tipo === "evento" ? s.enviadoFila : !s.foraDaFila && (s.situacao === "remodelar" || s.novaVersao === "validacao" || s.novaVersao === "migrado"));
+const fila = () => ativos().filter(naFila);
 
 function rankBadge(rank) {
   const cls = rank <= 3 ? " r-top" : rank <= 10 ? " r-mid" : "";
@@ -1309,16 +1326,29 @@ function handleRemodelarEdit(ev) {
   }
 }
 
+// Põe um evento na fila. Só por aqui eles entram em Remodelar.
+function enviarParaFila(s) {
+  s.enviadoFila = true;
+  registrar(s, "Enviado para a fila de remodelação.");
+  salvarSite(s);
+  if (DRAWER_ID === s.id) renderDrawer(s);
+  renderTudo();
+  toast(`"${s.nome}" foi para Remodelar.`);
+}
+
 // Sai só da fila: o site continua em Sites ou Eventos, com tudo que tem.
 async function tirarDaFila(s) {
-  const onde = s.tipo === "evento" ? "Eventos" : "Sites";
+  const evento = s.tipo === "evento";
+  const onde = evento ? "Eventos" : "Sites";
+  const volta = evento ? " Para voltar, use o botão de enviar na aba Eventos." : "";
   const ok = await confirmDialog(
     "Tirar da fila de remodelação",
-    `"${s.nome}" sai desta aba e para de contar na fila. O site continua em ${onde}, com histórico e checagens — isto não exclui nada.`,
+    `"${s.nome}" sai desta aba e para de contar na fila. O site continua em ${onde}, com histórico e checagens — isto não exclui nada.${volta}`,
     "Tirar da fila"
   );
   if (!ok) return;
-  s.foraDaFila = true;
+  if (evento) s.enviadoFila = false;
+  else s.foraDaFila = true;
   registrar(s, "Tirado da fila de remodelação.");
   salvarSite(s);
   if (DRAWER_ID === s.id) renderDrawer(s);
@@ -1475,10 +1505,19 @@ function renderDrawer(s) {
         ${campo("Endereço novo", `<input class="f f-mono d-novo" type="text" ${k} value="${esc(s.enderecoNovo)}" spellcheck="false" />`)}
       </div>
       ${
-        s.foraDaFila
-          ? `<div class="dica" style="margin-top:12px">Este site está <strong>fora da fila de remodelação</strong> por marcação manual.
+        s.tipo === "evento"
+          ? `<div class="dica" style="margin-top:12px">${
+              s.enviadoFila
+                ? "Este evento está <strong>na fila de remodelação</strong>."
+                : "Eventos só entram na fila de remodelação quando você envia."
+            }
+             <button type="button" class="btn-mini ${s.enviadoFila ? "d-tirafila" : "d-enviafila"}" ${k} style="margin-top:6px">${
+               s.enviadoFila ? `${ICON.tirar} Tirar da fila` : `${ICON.enviar} Enviar para Remodelar`
+             }</button></div>`
+          : s.foraDaFila
+            ? `<div class="dica" style="margin-top:12px">Este site está <strong>fora da fila de remodelação</strong> por marcação manual.
              <button type="button" class="btn-mini d-voltar" ${k} style="margin-top:6px">${ICON.plus} Devolver à fila</button></div>`
-          : ""
+            : ""
       }
     </section>
     <section class="dsec"><h3>Checagens${s.verificadoEm ? ` · varredura de ${s.verificadoEm}` : ""}</h3>
@@ -1516,7 +1555,7 @@ function handleDrawerEdit(ev) {
   } else if (c.contains("d-sit")) {
     registrar(s, `Situação: ${SITUACAO_META[s.situacao].label} → ${SITUACAO_META[el.value].label}.`);
     s.situacao = el.value;
-    if (el.value === "remodelar" && s.foraDaFila) {
+    if (el.value === "remodelar" && s.foraDaFila && s.tipo !== "evento") {
       s.foraDaFila = false;
       registrar(s, "Devolvido à fila, pela situação voltar a Remodelar.");
     }
@@ -1822,10 +1861,12 @@ async function init() {
     if (ev.target.id === "note-form") handleNote(ev);
   });
   drawer.addEventListener("click", (ev) => {
-    const b = ev.target.closest(".d-voltar");
+    const b = ev.target.closest(".d-voltar, .d-enviafila, .d-tirafila");
     if (!b) return;
     const s = siteDe(b);
     if (!s) return;
+    if (b.classList.contains("d-tirafila")) return tirarDaFila(s);
+    if (b.classList.contains("d-enviafila")) return enviarParaFila(s);
     s.foraDaFila = false;
     registrar(s, "Devolvido à fila de remodelação.");
     salvarSite(s);

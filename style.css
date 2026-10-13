@@ -878,6 +878,8 @@ select.f:hover, select.f:focus { background-color: var(--surface); }
 .mini:hover { background: var(--surface-3); color: var(--text); border-color: var(--line); }
 .mini:focus-visible { opacity: 1; box-shadow: var(--ring); }
 .mini.danger:hover { background: var(--risk-soft); color: var(--risk); border-color: var(--risk-line); }
+/* ligado: fica à vista sem precisar passar o mouse, porque é estado, não ação */
+.mini.ativo { opacity: 1; background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
 tbody tr:hover .mini, .mini:focus-visible { opacity: 1; }
 .mini[disabled] { opacity: 0 !important; pointer-events: none; }
 
