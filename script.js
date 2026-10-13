@@ -338,10 +338,10 @@ function registrar(site, texto) {
 const STATE = {
   tab: "painel",
   painel: {},
-  sites: { q: "", tipo: "", situacao: "", saude: "", versao: "", sort: { col: "nome", dir: "asc" } },
+  sites: { q: "", situacao: "", saude: "", versao: "", sort: { col: "nome", dir: "asc" } },
   eventos: { q: "", status: "", plataforma: "", sort: { col: "ano", dir: "desc" } },
   remodelar: { q: "", tipo: "", nv: "" },
-  seo: { q: "", veredito: "", conformidade: "", evento: "", sort: { col: "seo", dir: "asc" } },
+  seo: { q: "", veredito: "", conformidade: "", evento: "", checagem: "", versao: "", sort: { col: "seo", dir: "asc" } },
   prospectos: { q: "", saude: "", sort: { col: "mrr", dir: "desc" } },
 };
 
@@ -354,8 +354,8 @@ const PAGES = {
     add: "Novo site",
   },
   sites: {
-    title: "Todos os sites",
-    sub: "Cada site da Softaliza, de associação ou de evento, com situação, saúde e histórico.",
+    title: "Sites",
+    sub: "Os sites de associação da Softaliza, com situação, saúde e histórico.",
     add: "Novo site",
   },
   eventos: {
@@ -780,6 +780,8 @@ function ordenar(list, sort) {
 }
 
 const ativos = () => SITES.filter((s) => !s.removido);
+// as abas são recortes por tipo: Sites é associação, Eventos é evento
+const associacoes = () => ativos().filter((s) => s.tipo === "associacao");
 const buscaBate = (s, q) => !q || `${s.nome} ${s.nomeCompleto || ""} ${s.url}`.toLowerCase().includes(q);
 
 // ---------------------------------------------------------------------------
@@ -849,21 +851,21 @@ function renderPainel() {
     ]);
 
   document.getElementById("painel-alertas").innerHTML = [
-    { valor: foraDoAr.length, rotulo: "Fora do ar", sub: "Não responderam na última checagem", tom: "risco", ir: ["sites", { saude: "fora-do-ar", tipo: "", situacao: "", versao: "", q: "" }] },
-    { valor: semSeo.length, rotulo: "Sem SEO", sub: "Não aparecem na busca pela sigla", tom: "risco", ir: ["sites", { saude: "sem-seo", tipo: "", situacao: "", versao: "", q: "" }] },
-    { valor: semRodape.length, rotulo: "Sem rodapé Softaliza", sub: "No ar, mas sem o crédito", tom: "aviso", ir: ["sites", { saude: "sem-rodape", tipo: "", situacao: "", versao: "", q: "" }] },
-    { valor: indexacaoFora.length, rotulo: "Indexação fora da regra", sub: "A fechar ou a liberar", tom: "aviso", ir: ["seo", { conformidade: "", veredito: "", evento: "", q: "" }] },
+    { valor: foraDoAr.length, rotulo: "Fora do ar", sub: "Não responderam na última checagem", tom: "risco", ir: ["seo", { checagem: "fora-do-ar", veredito: "", conformidade: "", evento: "", versao: "", q: "" }] },
+    { valor: semSeo.length, rotulo: "Sem SEO", sub: "Não aparecem na busca pela sigla", tom: "risco", ir: ["seo", { checagem: "sem-seo", veredito: "", conformidade: "", evento: "", versao: "", q: "" }] },
+    { valor: semRodape.length, rotulo: "Sem rodapé Softaliza", sub: "No ar, mas sem o crédito", tom: "aviso", ir: ["seo", { checagem: "sem-rodape", veredito: "", conformidade: "", evento: "", versao: "", q: "" }] },
+    { valor: indexacaoFora.length, rotulo: "Indexação fora da regra", sub: `${lista.filter((s) => s.seo && s.seo.conformidade === "fechar").length} a fechar, ${lista.filter((s) => s.seo && s.seo.conformidade === "abrir").length} a liberar`, tom: "aviso", ir: ["seo", { conformidade: "fora", veredito: "", evento: "", checagem: "", versao: "", q: "" }] },
   ]
     .map(cartao)
     .join("");
 
   document.getElementById("painel-recortes").innerHTML = [
-    { valor: assoc.length, rotulo: "Sites de associações", sub: `${assoc.filter(versaoInicial).length} em versão inicial`, ir: ["sites", { tipo: "associacao", saude: "", situacao: "", versao: "", q: "" }] },
+    { valor: assoc.length, rotulo: "Sites de associações", sub: `${assoc.filter(versaoInicial).length} em versão inicial`, ir: ["sites", { saude: "", situacao: "", versao: "", q: "" }] },
     { valor: eventos.length, rotulo: "Sites de eventos", sub: `${eventos.filter(versaoInicial).length} em versão inicial`, ir: ["eventos", { status: "", plataforma: "", q: "" }] },
-    { valor: inicial.length, rotulo: "Em versão inicial", sub: "Não migrados para domínio próprio", tom: "aviso", ir: ["sites", { versao: "inicial", tipo: "", saude: "", situacao: "", q: "" }] },
-    { valor: definitivo.length, rotulo: "Link definitivo", sub: "Cliente escolheu ficar no softaliza", tom: "accent", ir: ["sites", { versao: "definitivo", tipo: "", saude: "", situacao: "", q: "" }] },
-    { valor: lista.filter((s) => s.situacao === "remodelar").length, rotulo: "Para remodelar", sub: "Na fila, ordenada por MRR", tom: "aviso", ir: ["remodelar", { tipo: "", nv: "", q: "" }] },
-    { valor: lista.filter((s) => s.situacao === "pronto").length, rotulo: "Prontos", sub: "Sem pendência de remodelação", tom: "ok", ir: ["sites", { situacao: "pronto", tipo: "", saude: "", versao: "", q: "" }] },
+    { valor: inicial.length, rotulo: "Em versão inicial", sub: "Não migrados para domínio próprio", tom: "aviso", ir: ["seo", { versao: "inicial", checagem: "", veredito: "", conformidade: "", evento: "", q: "" }] },
+    { valor: definitivo.length, rotulo: "Link definitivo", sub: "Cliente escolheu ficar no softaliza", tom: "accent", ir: ["seo", { versao: "definitivo", checagem: "", veredito: "", conformidade: "", evento: "", q: "" }] },
+    { valor: fila().filter((s) => s.novaVersao === "pendente").length, rotulo: "Para remodelar", sub: "Pendentes na fila, por MRR", tom: "aviso", ir: ["remodelar", { nv: "pendente", tipo: "", q: "" }] },
+    { valor: assoc.filter((s) => s.situacao === "pronto").length, rotulo: "Associações prontas", sub: `${eventos.filter((s) => s.situacao === "pronto").length} eventos também prontos`, tom: "ok", ir: ["sites", { situacao: "pronto", saude: "", versao: "", q: "" }] },
     { valor: prospectosAtuais().length, rotulo: "Sem site conosco", sub: "Associações que poderiam ter", ir: ["prospectos", { saude: "", q: "" }] },
   ]
     .map(cartao)
@@ -892,7 +894,7 @@ function renderSitesMetrics(list) {
   const mrr = list.reduce((a, s) => a + (s.mrr || 0), 0);
 
   document.getElementById("sites-metrics").innerHTML = metricsHtml([
-    { label: "Sites", value: total, note: `${list.filter((s) => s.tipo === "associacao").length} associações · ${list.filter((s) => s.tipo === "evento").length} eventos` },
+    { label: "Sites", value: total, note: `${list.filter(versaoInicial).length} ainda em versão inicial` },
     { label: "Prontos", value: prontos, dot: "d-ok", note: `${pct(prontos, total)}% do recorte` },
     { label: "Para remodelar", value: remodelar, dot: "d-warn", note: `${moeda(mrr)} de MRR no recorte` },
     { label: "Fora do ar", value: foraDoAr, dot: "d-risk", note: `${semRodape} no ar sem o rodapé` },
@@ -951,9 +953,8 @@ function renderSitesTable(list) {
 
 function renderSites() {
   const st = STATE.sites;
-  const filtered = ativos().filter((s) => {
+  const filtered = associacoes().filter((s) => {
     if (!buscaBate(s, st.q)) return false;
-    if (st.tipo && s.tipo !== st.tipo) return false;
     if (st.situacao && s.situacao !== st.situacao) return false;
     if (st.saude === "fora-do-ar" && checagem(s, "ar").valor !== false) return false;
     if (st.saude === "sem-rodape" && !(checagem(s, "ar").valor !== false && checagem(s, "rodape").valor === false)) return false;
@@ -968,7 +969,7 @@ function renderSites() {
   renderSitesMetrics(sorted);
   renderSitesTable(sorted);
   syncTableFit();
-  const total = ativos().length;
+  const total = associacoes().length;
   document.getElementById("sites-count").textContent = sorted.length === total ? `${total} no total` : `${sorted.length} de ${total}`;
   renderNavCounts();
 }
@@ -1375,9 +1376,16 @@ function renderSeo() {
   const filtered = ativos().filter((s) => {
     if (!buscaBate(s, st.q)) return false;
     if (st.veredito && !(s.seo && s.seo.encontravel === st.veredito)) return false;
-    if (st.conformidade && !(s.seo && s.seo.conformidade === st.conformidade)) return false;
+    if (st.conformidade === "fora" && !(s.seo && (s.seo.conformidade === "fechar" || s.seo.conformidade === "abrir"))) return false;
+    if (st.conformidade && st.conformidade !== "fora" && !(s.seo && s.seo.conformidade === st.conformidade)) return false;
     if (st.evento === "ativos" && !(s.tipo === "evento" && s.statusEvento !== "realizado")) return false;
     if (st.evento === "associacao" && s.tipo !== "associacao") return false;
+    if (st.checagem === "fora-do-ar" && checagem(s, "ar").valor !== false) return false;
+    if (st.checagem === "sem-rodape" && !(checagem(s, "ar").valor !== false && checagem(s, "rodape").valor === false)) return false;
+    if (st.checagem === "sem-seo" && checagem(s, "seo").valor !== false) return false;
+    if (st.versao === "inicial" && !versaoInicial(s)) return false;
+    if (st.versao === "definitivo" && !(emSoftaliza(s) && s.linkDefinitivo)) return false;
+    if (st.versao === "proprio" && emSoftaliza(s)) return false;
     return true;
   });
   const sorted = ordenar(filtered, st.sort);
@@ -1707,7 +1715,7 @@ function exportCsv() {
 // ---------------------------------------------------------------------------
 
 function renderNavCounts() {
-  document.getElementById("count-sites").textContent = ativos().length;
+  document.getElementById("count-sites").textContent = associacoes().length;
   document.getElementById("count-eventos").textContent = eventos().length;
   document.getElementById("count-remodelar").textContent = fila().filter((s) => s.novaVersao !== "feita").length;
   document.getElementById("count-seo").textContent = ativos().filter((s) => s.noAr === false || (s.noAr && s.rodapeSoftaliza === false) || (s.seo && s.seo.encontravel === "nao")).length;
@@ -1857,7 +1865,6 @@ async function init() {
   busca("seo-search", "seo", renderSeo);
   busca("prospectos-search", "prospectos", renderProspectos);
 
-  initChips("sites-chips-tipo", (v) => ((STATE.sites.tipo = v), renderSites()));
   initChips("sites-chips-situacao", (v) => ((STATE.sites.situacao = v), renderSites()));
   initChips("sites-chips-saude", (v) => ((STATE.sites.saude = v), renderSites()));
   initChips("sites-chips-versao", (v) => ((STATE.sites.versao = v), renderSites()));
@@ -1866,6 +1873,8 @@ async function init() {
   initChips("remodelar-chips-tipo", (v) => ((STATE.remodelar.tipo = v), renderRemodelar()));
   initChips("remodelar-chips-nv", (v) => ((STATE.remodelar.nv = v), renderRemodelar()));
   initChips("seo-chips-veredito", (v) => ((STATE.seo.veredito = v), renderSeo()));
+  initChips("seo-chips-checagem", (v) => ((STATE.seo.checagem = v), renderSeo()));
+  initChips("seo-chips-versao", (v) => ((STATE.seo.versao = v), renderSeo()));
   initChips("seo-chips-conformidade", (v) => ((STATE.seo.conformidade = v), renderSeo()));
   initChips("seo-chips-evento", (v) => ((STATE.seo.evento = v), renderSeo()));
   initChips("prospectos-chips-saude", (v) => ((STATE.prospectos.saude = v), renderProspectos()));

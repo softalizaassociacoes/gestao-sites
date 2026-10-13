@@ -42,7 +42,7 @@
       <nav class="rail-nav">
         <button class="nav-item" data-tab="sites" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>
-          <span class="nav-text">Todos os sites</span>
+          <span class="nav-text">Sites</span>
           <span class="nav-count" id="count-sites">0</span>
         </button>
         <button class="nav-item" data-tab="eventos" type="button">
@@ -84,8 +84,8 @@
       <header class="topbar">
         <img class="topbar-mobile-brand" src="logo.svg" alt="Softaliza" />
         <div class="topbar-text">
-          <h1 class="page-title" id="page-title">Todos os sites</h1>
-          <p class="page-sub" id="page-sub">Cada site da Softaliza, de associação ou de evento, com situação, saúde e histórico.</p>
+          <h1 class="page-title" id="page-title">Sites</h1>
+          <p class="page-sub" id="page-sub">Os sites de associação da Softaliza, com situação, saúde e histórico.</p>
         </div>
         <div class="topbar-actions">
           <button class="icon-btn" id="btn-export" type="button" title="Exportar visão atual em CSV" aria-label="Exportar CSV">
@@ -124,11 +124,6 @@
               <input type="text" id="sites-search" placeholder="Buscar por nome, sigla ou endereço…" autocomplete="off" />
               <kbd>/</kbd>
             </div>
-            <div class="chips" id="sites-chips-tipo" role="group" aria-label="Filtrar por tipo">
-              <button class="chip on" data-value="" type="button">Todos</button>
-              <button class="chip" data-value="associacao" type="button">Associações</button>
-              <button class="chip" data-value="evento" type="button">Eventos</button>
-            </div>
             <div class="chips" id="sites-chips-situacao" role="group" aria-label="Filtrar por situação">
               <button class="chip on" data-value="" type="button">Toda situação</button>
               <button class="chip" data-value="pronto" type="button"><span class="chip-dot d-ok"></span>Pronto</button>
@@ -152,7 +147,7 @@
 
           <div class="card">
             <div class="card-head">
-              <h2>Sites</h2>
+              <h2>Sites de associações</h2>
               <span class="count" id="sites-count"></span>
             </div>
             <div class="table-scroll">
@@ -292,14 +287,27 @@
             </div>
             <div class="chips" id="seo-chips-conformidade" role="group" aria-label="Filtrar por indexação">
               <button class="chip on" data-value="" type="button">Toda indexação</button>
+              <button class="chip" data-value="fora" type="button"><span class="chip-dot d-risk"></span>Fora da regra</button>
               <button class="chip" data-value="fechar" type="button"><span class="chip-dot d-warn"></span>Fechar</button>
               <button class="chip" data-value="abrir" type="button"><span class="chip-dot d-risk"></span>Liberar</button>
               <button class="chip" data-value="ok" type="button"><span class="chip-dot d-ok"></span>Correto</button>
             </div>
-            <div class="chips" id="seo-chips-evento" role="group" aria-label="Filtrar eventos">
+            <div class="chips" id="seo-chips-evento" role="group" aria-label="Filtrar por tipo">
               <button class="chip on" data-value="" type="button">Todos</button>
-              <button class="chip" data-value="ativos" type="button">Só eventos ativos</button>
               <button class="chip" data-value="associacao" type="button">Só associações</button>
+              <button class="chip" data-value="ativos" type="button">Só eventos ativos</button>
+            </div>
+            <div class="chips" id="seo-chips-checagem" role="group" aria-label="Filtrar por checagem">
+              <button class="chip on" data-value="" type="button">Toda checagem</button>
+              <button class="chip" data-value="fora-do-ar" type="button"><span class="chip-dot d-risk"></span>Fora do ar</button>
+              <button class="chip" data-value="sem-rodape" type="button"><span class="chip-dot d-warn"></span>Sem rodapé</button>
+              <button class="chip" data-value="sem-seo" type="button"><span class="chip-dot d-risk"></span>Sem SEO</button>
+            </div>
+            <div class="chips" id="seo-chips-versao" role="group" aria-label="Filtrar por versão">
+              <button class="chip on" data-value="" type="button">Toda versão</button>
+              <button class="chip" data-value="inicial" type="button"><span class="chip-dot d-warn"></span>Versão inicial</button>
+              <button class="chip" data-value="definitivo" type="button"><span class="chip-dot d-accent"></span>Link definitivo</button>
+              <button class="chip" data-value="proprio" type="button"><span class="chip-dot d-ok"></span>Domínio próprio</button>
             </div>
           </div>
 
