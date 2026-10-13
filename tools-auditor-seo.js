@@ -85,6 +85,11 @@ async function auditar(alvo) {
       r.lang = texto(html, /<html[^>]+lang=["']([^"']*)["']/i);
       r.viewport = !!metaConteudo(html, "viewport");
       r.temGA = /googletagmanager\.com|google-analytics\.com|gtag\(/i.test(html);
+      // crédito da Softaliza no rodapé: procura o nome num <footer>, e na falta
+      // dele no último quinto da página, que é onde o rodapé costuma estar
+      const footer = (html.match(/<footer[\s\S]*?<\/footer>/i) || [""])[0];
+      const cauda = html.slice(Math.floor(html.length * 0.8));
+      r.rodapeSoftaliza = /softaliza/i.test(footer) || /softaliza/i.test(cauda);
     }
   } catch (e) {
     r.erro = e.name === "AbortError" ? "tempo esgotado" : e.message;
@@ -136,6 +141,8 @@ function avaliar(r) {
   const avisos = [];
 
   r.dominioSoftaliza = ehSoftaliza(r.url) || ehSoftaliza(r.urlFinal);
+  // "no ar" é só responder com página: bloqueio por WAF ainda conta como no ar
+  r.noAr = !r.erro || !!r.bloqueadoPorWaf;
   const bloqueado = !!(r.noindex || r.robotsBloqueiaTudo || r.atrasDeLogin);
 
   if (r.erro && !r.bloqueadoPorWaf) r.conformidade = "fora-do-ar";

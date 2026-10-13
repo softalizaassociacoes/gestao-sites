@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gestão de Sites — Softaliza</title>
-  <meta name="description" content="Painel interno de migração dos sites de associações e eventos da Softaliza." />
+  <meta name="description" content="Gestor dos sites de associações e eventos da Softaliza." />
   <link rel="icon" type="image/svg+xml" href="logo.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -30,38 +30,37 @@
         </div>
       </div>
 
-      <div class="rail-label">Painéis</div>
+      <div class="rail-label">Sites</div>
       <nav class="rail-nav">
-        <button class="nav-item active" data-tab="assoc" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M10 21v-4h4v4"/></svg>
-          <span class="nav-text">Sites</span>
-          <span class="nav-count" id="count-assoc">0</span>
-        </button>
-        <button class="nav-item" data-tab="evento" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
-          <span class="nav-text">Eventos</span>
-          <span class="nav-count" id="count-evento">0</span>
-        </button>
-        <button class="nav-item" data-tab="remodela" type="button">
+        <button class="nav-item active" data-tab="sites" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>
-          <span class="nav-text">Remodelar</span>
-          <span class="nav-count" id="count-remodela">0</span>
+          <span class="nav-text">Todos os sites</span>
+          <span class="nav-count" id="count-sites">0</span>
         </button>
-        <button class="nav-item" data-tab="carteira" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>
-          <span class="nav-text">Associações</span>
-          <span class="nav-count" id="count-carteira">0</span>
+        <button class="nav-item" data-tab="remodelar" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.9 2.9M16.2 16.2l2.9 2.9M2 12h4M18 12h4M4.9 19.1l2.9-2.9M16.2 7.8l2.9-2.9"/></svg>
+          <span class="nav-text">Remodelar</span>
+          <span class="nav-count" id="count-remodelar">0</span>
         </button>
         <button class="nav-item" data-tab="seo" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8.5 11.5l2 2 3.5-4"/></svg>
-          <span class="nav-text">SEOs</span>
+          <span class="nav-text">SEO e saúde</span>
           <span class="nav-count" id="count-seo">0</span>
+        </button>
+      </nav>
+
+      <div class="rail-label">Oportunidades</div>
+      <nav class="rail-nav">
+        <button class="nav-item" data-tab="prospectos" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+          <span class="nav-text">Sem site conosco</span>
+          <span class="nav-count" id="count-prospectos">0</span>
         </button>
       </nav>
 
       <div class="rail-foot">
         <div class="rail-note">
-          <strong>Base:</strong> planilhas de associações, sites e eventos, semeadas em <code>data.js</code>.
+          <strong>Base:</strong> os sites da Softaliza, semeados em <code>data.js</code>. O SoftaHub entra só no quadro de oportunidades.
           <span class="sync-status s-off" id="sync-status">Verificando…</span>
         </div>
       </div>
@@ -72,8 +71,8 @@
       <header class="topbar">
         <img class="topbar-mobile-brand" src="logo.svg" alt="Softaliza" />
         <div class="topbar-text">
-          <h1 class="page-title" id="page-title">Sites</h1>
-          <p class="page-sub" id="page-sub">As associações cujo site é conosco, com tipo e endereço de cada um.</p>
+          <h1 class="page-title" id="page-title">Todos os sites</h1>
+          <p class="page-sub" id="page-sub">Cada site da Softaliza, de associação ou de evento, com situação, saúde e histórico.</p>
         </div>
         <div class="topbar-actions">
           <button class="icon-btn" id="btn-export" type="button" title="Exportar visão atual em CSV" aria-label="Exportar CSV">
@@ -85,204 +84,111 @@
           </button>
           <button class="btn btn-primary" id="btn-add" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-            <span class="btn-text" id="btn-add-text">Nova associação</span>
+            <span class="btn-text" id="btn-add-text">Novo site</span>
           </button>
         </div>
       </header>
 
       <div class="content">
-        <!-- ================================================ associações -->
-        <section id="panel-assoc" class="panel active">
-          <div class="metrics" id="assoc-metrics"></div>
-          <div class="comp-grid" id="assoc-composition"></div>
+        <!-- ===================================================== sites -->
+        <section id="panel-sites" class="panel active">
+          <div class="metrics" id="sites-metrics"></div>
+          <div class="comp-grid" id="sites-composition"></div>
 
           <div class="filters">
             <div class="search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-              <input type="text" id="assoc-search" placeholder="Buscar por sigla ou nome…" autocomplete="off" />
+              <input type="text" id="sites-search" placeholder="Buscar por nome, sigla ou endereço…" autocomplete="off" />
               <kbd>/</kbd>
             </div>
-            <div class="chips" id="assoc-chips-health" role="group" aria-label="Filtrar por saúde">
-              <button class="chip on" data-value="" type="button">Toda saúde</button>
-              <button class="chip" data-value="saudavel" type="button"><span class="chip-dot d-ok"></span>Saudável</button>
-              <button class="chip" data-value="atencao" type="button"><span class="chip-dot d-warn"></span>Atenção</button>
-              <button class="chip" data-value="risco" type="button"><span class="chip-dot d-risk"></span>Risco</button>
-              <button class="chip" data-value="cancelado" type="button"><span class="chip-dot d-off"></span>Cancelado</button>
+            <div class="chips" id="sites-chips-tipo" role="group" aria-label="Filtrar por tipo">
+              <button class="chip on" data-value="" type="button">Todos</button>
+              <button class="chip" data-value="associacao" type="button">Associações</button>
+              <button class="chip" data-value="evento" type="button">Eventos</button>
             </div>
-            <div class="chips" id="assoc-chips-site" role="group" aria-label="Filtrar por tipo de site">
-              <button class="chip on" data-value="" type="button">Todo site</button>
-              <button class="chip" data-value="wordpress" type="button">WordPress</button>
-              <button class="chip" data-value="personalizado" type="button">Personalizado</button>
-              <button class="chip" data-value="hotsite" type="button">Hotsite</button>
+            <div class="chips" id="sites-chips-situacao" role="group" aria-label="Filtrar por situação">
+              <button class="chip on" data-value="" type="button">Toda situação</button>
+              <button class="chip" data-value="pronto" type="button"><span class="chip-dot d-ok"></span>Pronto</button>
+              <button class="chip" data-value="remodelar" type="button"><span class="chip-dot d-warn"></span>Remodelar</button>
+              <button class="chip" data-value="construcao" type="button"><span class="chip-dot d-accent"></span>Em construção</button>
+              <button class="chip" data-value="desativado" type="button"><span class="chip-dot d-off"></span>Desativado</button>
+            </div>
+            <div class="chips" id="sites-chips-saude" role="group" aria-label="Filtrar por checagem">
+              <button class="chip on" data-value="" type="button">Toda checagem</button>
+              <button class="chip" data-value="fora-do-ar" type="button"><span class="chip-dot d-risk"></span>Fora do ar</button>
+              <button class="chip" data-value="sem-rodape" type="button"><span class="chip-dot d-warn"></span>Sem rodapé</button>
+              <button class="chip" data-value="sem-seo" type="button"><span class="chip-dot d-risk"></span>Sem SEO</button>
             </div>
           </div>
 
           <div class="card">
             <div class="card-head">
               <h2>Sites</h2>
-              <span class="count" id="assoc-count"></span>
+              <span class="count" id="sites-count"></span>
             </div>
             <div class="table-scroll">
               <table>
                 <thead>
                   <tr>
-                    <th class="sortable" data-sort="sigla">Associação <span class="arrow"></span></th>
-                    <th class="sortable" data-sort="saude">Saúde <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="nome">Site <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="plataforma">Plataforma <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="situacao">Situação <span class="arrow"></span></th>
+                    <th>Endereço</th>
+                    <th>Checagens</th>
                     <th class="sortable num" data-sort="mrr">MRR <span class="arrow"></span></th>
-                    <th class="sortable" data-sort="siteAtual">Site atual <span class="arrow"></span></th>
-                    <th>Endereço</th>
                     <th></th>
                   </tr>
                 </thead>
-                <tbody id="assoc-table-body"></tbody>
+                <tbody id="sites-table-body"></tbody>
               </table>
             </div>
           </div>
         </section>
 
-        <!-- ==================================================== eventos -->
-        <section id="panel-evento" class="panel">
-          <div class="metrics" id="evento-metrics"></div>
-          <div class="comp-grid" id="evento-composition"></div>
+        <!-- ================================================= remodelar -->
+        <section id="panel-remodelar" class="panel">
+          <div class="metrics" id="remodelar-metrics"></div>
 
           <div class="filters">
             <div class="search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-              <input type="text" id="evento-search" placeholder="Buscar por evento, sigla ou associação…" autocomplete="off" />
+              <input type="text" id="remodelar-search" placeholder="Buscar na fila…" autocomplete="off" />
               <kbd>/</kbd>
             </div>
-            <div class="chips" id="evento-chips-status" role="group" aria-label="Filtrar por status">
-              <button class="chip on" data-value="" type="button">Todo status</button>
-              <button class="chip" data-value="a_acontecer" type="button"><span class="chip-dot d-warn"></span>A acontecer</button>
-              <button class="chip" data-value="acontecendo" type="button"><span class="chip-dot d-ok"></span>Acontecendo</button>
-              <button class="chip" data-value="realizado" type="button"><span class="chip-dot d-off"></span>Realizado</button>
+            <div class="chips" id="remodelar-chips-tipo" role="group" aria-label="Filtrar por tipo">
+              <button class="chip on" data-value="" type="button">Todos</button>
+              <button class="chip" data-value="associacao" type="button">Associações</button>
+              <button class="chip" data-value="evento" type="button">Eventos</button>
             </div>
-            <div class="chips" id="evento-chips-site" role="group" aria-label="Filtrar por tipo de site">
-              <button class="chip on" data-value="" type="button">Todo site</button>
-              <button class="chip" data-value="wordpress" type="button">WordPress</button>
-              <button class="chip" data-value="personalizado" type="button">Personalizado</button>
-              <button class="chip" data-value="hotsite" type="button">Hotsite</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <h2>Sites de eventos</h2>
-              <span class="count" id="evento-count"></span>
-            </div>
-            <div class="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th class="sortable" data-sort="nome">Evento <span class="arrow"></span></th>
-                    <th class="sortable num" data-sort="ano">Ano <span class="arrow"></span></th>
-                    <th class="sortable" data-sort="status">Status <span class="arrow"></span></th>
-                    <th class="sortable" data-sort="siteAtual">Tipo de site <span class="arrow"></span></th>
-                    <th>Endereço</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="evento-table-body"></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- =============================================== remodelação -->
-        <section id="panel-remodela" class="panel">
-          <div class="metrics" id="remodela-metrics"></div>
-
-          <div class="filters">
-            <div class="search">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-              <input type="text" id="remodela-search" placeholder="Buscar na fila…" autocomplete="off" />
-              <kbd>/</kbd>
-            </div>
-            <div class="chips" id="remodela-chips-nv" role="group" aria-label="Filtrar por nova versão">
+            <div class="chips" id="remodelar-chips-nv" role="group" aria-label="Filtrar por nova versão">
               <button class="chip on" data-value="" type="button">Todas</button>
               <button class="chip" data-value="pendente" type="button"><span class="chip-dot d-warn"></span>Pendentes</button>
               <button class="chip" data-value="feita" type="button"><span class="chip-dot d-ok"></span>Feitas</button>
               <button class="chip" data-value="nao" type="button"><span class="chip-dot d-risk"></span>Não</button>
-            </div>
-            <div class="chips" id="remodela-chips-origem" role="group" aria-label="Filtrar por tipo de site">
-              <button class="chip on" data-value="" type="button">Todo site</button>
-              <button class="chip" data-value="wordpress" type="button">WordPress</button>
-              <button class="chip" data-value="personalizado" type="button">Personalizado</button>
-              <button class="chip" data-value="hotsite" type="button">Hotsite</button>
             </div>
           </div>
 
           <div class="card">
             <div class="card-head">
               <h2>Fila de remodelação</h2>
-              <span class="count" id="remodela-count"></span>
+              <span class="count" id="remodelar-count"></span>
               <span class="spacer"></span>
-              <div class="progress-inline" id="remodela-progress"></div>
+              <div class="progress-inline" id="remodelar-progress"></div>
             </div>
             <div class="table-scroll">
               <table>
                 <thead>
                   <tr>
                     <th>Prio.</th>
-                    <th>Associação</th>
-                    <th>Saúde</th>
+                    <th>Site</th>
                     <th class="num">MRR</th>
-                    <th>Site atual</th>
-                    <th>Endereço</th>
+                    <th>Endereço atual</th>
                     <th>Nova versão</th>
                     <th>Endereço novo</th>
                     <th></th>
                   </tr>
                 </thead>
-                <tbody id="remodela-table-body"></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- ================================================ associações -->
-        <section id="panel-carteira" class="panel">
-          <div class="metrics" id="carteira-metrics"></div>
-          <div class="comp-grid" id="carteira-composition"></div>
-
-          <div class="filters">
-            <div class="search">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-              <input type="text" id="carteira-search" placeholder="Buscar por sigla ou nome…" autocomplete="off" />
-              <kbd>/</kbd>
-            </div>
-            <div class="chips" id="carteira-chips-conosco" role="group" aria-label="Filtrar por site conosco">
-              <button class="chip on" data-value="" type="button">Todas</button>
-              <button class="chip" data-value="sim" type="button"><span class="chip-dot d-ok"></span>Conosco</button>
-              <button class="chip" data-value="nao" type="button"><span class="chip-dot d-off"></span>Sem site conosco</button>
-            </div>
-            <div class="chips" id="carteira-chips-saude" role="group" aria-label="Filtrar por saúde">
-              <button class="chip on" data-value="" type="button">Toda saúde</button>
-              <button class="chip" data-value="saudavel" type="button"><span class="chip-dot d-ok"></span>Saudável</button>
-              <button class="chip" data-value="atencao" type="button"><span class="chip-dot d-warn"></span>Atenção</button>
-              <button class="chip" data-value="risco" type="button"><span class="chip-dot d-risk"></span>Risco</button>
-              <button class="chip" data-value="cancelado" type="button"><span class="chip-dot d-off"></span>Cancelado</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <h2>Associações</h2>
-              <span class="count" id="carteira-count"></span>
-            </div>
-            <div class="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th class="sortable" data-sort="sigla">Associação <span class="arrow"></span></th>
-                    <th class="sortable" data-sort="saude">Saúde <span class="arrow"></span></th>
-                    <th class="sortable num" data-sort="mrr">MRR <span class="arrow"></span></th>
-                    <th>Endereço</th>
-                    <th>Site conosco</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="carteira-table-body"></tbody>
+                <tbody id="remodelar-table-body"></tbody>
               </table>
             </div>
           </div>
@@ -296,20 +202,15 @@
           <div class="filters">
             <div class="search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-              <input type="text" id="seo-search" placeholder="Buscar por sigla, evento, endereço ou pesquisa…" autocomplete="off" />
+              <input type="text" id="seo-search" placeholder="Buscar por nome, sigla ou endereço…" autocomplete="off" />
               <kbd>/</kbd>
             </div>
-            <div class="chips" id="seo-chips-veredito" role="group" aria-label="Filtrar por situação">
+            <div class="chips" id="seo-chips-veredito" role="group" aria-label="Filtrar por situação de SEO">
               <button class="chip on" data-value="" type="button">Tudo</button>
               <button class="chip" data-value="nao" type="button"><span class="chip-dot d-risk"></span>Sem SEO</button>
-              <button class="chip" data-value="fraco" type="button"><span class="chip-dot d-warn"></span>SEO Configurando</button>
-              <button class="chip" data-value="provavel" type="button"><span class="chip-dot d-accent"></span>SEO Bom</button>
-              <button class="chip" data-value="forte" type="button"><span class="chip-dot d-ok"></span>SEO Pronto</button>
-            </div>
-            <div class="chips" id="seo-chips-tipo" role="group" aria-label="Filtrar por tipo">
-              <button class="chip on" data-value="" type="button">Todos</button>
-              <button class="chip" data-value="associacao" type="button">Associações</button>
-              <button class="chip" data-value="evento" type="button">Eventos</button>
+              <button class="chip" data-value="fraco" type="button"><span class="chip-dot d-warn"></span>Configurando</button>
+              <button class="chip" data-value="provavel" type="button"><span class="chip-dot d-accent"></span>Bom</button>
+              <button class="chip" data-value="forte" type="button"><span class="chip-dot d-ok"></span>Pronto</button>
             </div>
             <div class="chips" id="seo-chips-conformidade" role="group" aria-label="Filtrar por indexação">
               <button class="chip on" data-value="" type="button">Toda indexação</button>
@@ -317,16 +218,16 @@
               <button class="chip" data-value="abrir" type="button"><span class="chip-dot d-risk"></span>Liberar</button>
               <button class="chip" data-value="ok" type="button"><span class="chip-dot d-ok"></span>Correto</button>
             </div>
-            <div class="chips" id="seo-chips-status" role="group" aria-label="Filtrar por status do evento">
-              <button class="chip on" data-value="" type="button">Todo status</button>
-              <button class="chip" data-value="a_acontecer" type="button">A acontecer</button>
-              <button class="chip" data-value="acontecendo" type="button">Acontecendo</button>
+            <div class="chips" id="seo-chips-evento" role="group" aria-label="Filtrar eventos">
+              <button class="chip on" data-value="" type="button">Todos</button>
+              <button class="chip" data-value="ativos" type="button">Só eventos ativos</button>
+              <button class="chip" data-value="associacao" type="button">Só associações</button>
             </div>
           </div>
 
           <div class="card">
             <div class="card-head">
-              <h2>Busca pela sigla ou nome</h2>
+              <h2>SEO, rodapé e disponibilidade</h2>
               <span class="count" id="seo-count"></span>
               <span class="spacer"></span>
               <div class="progress-inline" id="seo-progress"></div>
@@ -335,12 +236,13 @@
               <table>
                 <thead>
                   <tr>
-                    <th class="sortable" data-sort="rotulo">Site <span class="arrow"></span></th>
-                    <th class="sortable" data-sort="veredito">Na busca <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="nome">Site <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="seo">Na busca <span class="arrow"></span></th>
                     <th>Indexado?</th>
                     <th>Indexação</th>
+                    <th>Rodapé</th>
+                    <th>No ar</th>
                     <th>Pesquisa</th>
-                    <th></th>
                   </tr>
                 </thead>
                 <tbody id="seo-table-body"></tbody>
@@ -350,16 +252,69 @@
 
           <p class="seo-nota" id="seo-nota"></p>
         </section>
+
+        <!-- ================================================ prospectos -->
+        <section id="panel-prospectos" class="panel">
+          <div class="metrics" id="prospectos-metrics"></div>
+
+          <div class="filters">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="prospectos-search" placeholder="Buscar por sigla ou nome…" autocomplete="off" />
+              <kbd>/</kbd>
+            </div>
+            <div class="chips" id="prospectos-chips-saude" role="group" aria-label="Filtrar por saúde">
+              <button class="chip on" data-value="" type="button">Toda saúde</button>
+              <button class="chip" data-value="saudavel" type="button"><span class="chip-dot d-ok"></span>Saudável</button>
+              <button class="chip" data-value="atencao" type="button"><span class="chip-dot d-warn"></span>Atenção</button>
+              <button class="chip" data-value="risco" type="button"><span class="chip-dot d-risk"></span>Risco</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Associações do SoftaHub sem site conosco</h2>
+              <span class="count" id="prospectos-count"></span>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="sortable" data-sort="sigla">Associação <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="saude">Saúde <span class="arrow"></span></th>
+                    <th class="sortable num" data-sort="mrr">MRR <span class="arrow"></span></th>
+                    <th>Site atual deles</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="prospectos-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="seo-nota">Quem está aqui é cliente da Softaliza no SoftaHub, mas o site não é conosco. Ordenado por MRR: quanto maior, maior a oportunidade. O botão de cada linha abre o cadastro já preenchido.</p>
+        </section>
       </div>
     </div>
   </div>
+
+  <!-- ================================================ painel de detalhe -->
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div class="drawer-ident" id="drawer-ident"></div>
+      <button class="icon-btn" type="button" id="drawer-close" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
 
   <!-- ======================================================== diálogos -->
   <dialog class="modal" id="dlg-add">
     <div class="modal-head">
       <div>
-        <h2 id="dlg-add-title">Nova associação</h2>
-        <p id="dlg-add-sub">Entra na lista e fica salva neste navegador.</p>
+        <h2 id="dlg-add-title">Novo site</h2>
+        <p id="dlg-add-sub">Entra na lista de sites e é gravado no banco.</p>
       </div>
       <button class="icon-btn" type="button" data-close aria-label="Fechar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>

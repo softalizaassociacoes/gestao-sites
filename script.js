@@ -1,115 +1,198 @@
 // ============================================================================
-// Gestão de Sites — painel.
+// Gestão de Sites — painel centrado em site.
 //
-// A base fica em data.js e serve de semente. A fonte de verdade é o banco no
-// Supabase, alcançado por /api/dados. O localStorage guarda só um espelho do
-// que veio do banco, para o painel abrir mesmo offline.
+// Um registro por site da Softaliza, de associação ou de evento. A base em
+// data.js é semente; a verdade é o banco no Supabase, por /api/dados. O
+// localStorage espelha o banco para o painel abrir offline.
 // ============================================================================
 
 const API = "/api/dados";
-const CACHE_ASSOC = "gestaoSitesCacheAssoc";
-const CACHE_EVENTO = "gestaoSitesCacheEventos";
-const CACHE_SEO = "gestaoSitesCacheSeo";
+const CACHE_SITES = "gestaoSitesCacheSites";
 const TAB_KEY = "gestaoSitesTab";
 const THEME_KEY = "gestaoSitesTheme";
 
-const currency = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-  maximumFractionDigits: 0,
-});
+const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-let ASSOCIACOES = [];
-let EVENTOS = [];
-let SEO = [];
+let SITES = [];
+const PROSPECTOS = typeof PROSPECTOS_BASE !== "undefined" ? PROSPECTOS_BASE : [];
 
 const BANCO = { ativo: false, fila: new Map(), timer: null, enviando: false };
 
+const hoje = () => new Date().toISOString().slice(0, 10);
+
 // ---------------------------------------------------------------------------
-// Semente e espelho local
+// Semente, normalização e mesclagem
 // ---------------------------------------------------------------------------
 
-function semearAssociacoes() {
-  return ASSOCIACOES_BASE.map((a) => ({ chave: a.sigla, ...a, removido: false }));
+function semearSites() {
+  const base = typeof SITES_BASE !== "undefined" ? SITES_BASE : [];
+  return base.map(normalizarSite);
 }
 
-function semearEventos() {
-  return EVENTOS_BASE.map((e) => ({ ...e, removido: false }));
+// registro de deploy anterior pode não ter campo novo: tudo ganha padrão aqui
+function normalizarSite(s) {
+  const seo = s.seo
+    ? {
+        encontravel: s.seo.encontravel || "fraco",
+        conformidade: s.seo.conformidade || "ok",
+        dominioSoftaliza: !!s.seo.dominioSoftaliza,
+        indexavel: s.seo.indexavel !== false,
+        siglaNoTitulo: !!s.seo.siglaNoTitulo,
+        titulo: s.seo.titulo || null,
+        urlFinal: s.seo.urlFinal || null,
+        problemas: s.seo.problemas || [],
+        lacunas: s.seo.lacunas || [],
+        auditadoEm: s.seo.auditadoEm || null,
+        indexado: !!s.seo.indexado,
+        pesquisa: s.seo.pesquisa || s.nome || "",
+        encontravelManual: !!s.seo.encontravelManual,
+      }
+    : null;
+  return {
+    id: s.id,
+    tipo: s.tipo === "evento" ? "evento" : "associacao",
+    nome: s.nome || "",
+    nomeCompleto: s.nomeCompleto || null,
+    url: s.url || "",
+    plataforma: s.plataforma || "wordpress",
+    situacao: s.situacao || (s.plataforma === "wordpress" ? "remodelar" : "pronto"),
+    novaVersao: s.novaVersao || "pendente",
+    enderecoNovo: s.enderecoNovo || "",
+    saude: s.saude || null,
+    mrr: s.mrr == null ? null : Number(s.mrr),
+    statusEvento: s.statusEvento || null,
+    ano: s.ano == null ? null : Number(s.ano),
+    seo,
+    rodapeSoftaliza: s.rodapeSoftaliza == null ? null : !!s.rodapeSoftaliza,
+    noAr: s.noAr == null ? null : !!s.noAr,
+    verificadoEm: s.verificadoEm || null,
+    historico: Array.isArray(s.historico) ? s.historico : [],
+    manual: !!s.manual,
+    removido: !!s.removido,
+  };
 }
 
-// tipo + chave porque uma sigla de associação e um id de evento vivem na mesma
-// tabela; "indexado" é marcação manual, o resto vem da varredura
-function semearSeo() {
-  const base = typeof SEO_BASE !== "undefined" ? SEO_BASE : [];
-  return base.map((r) => ({
-    ...r,
-    seoId: `${r.tipo}:${r.chave}`,
-    indexado: !!r.indexado,
-    // a busca padrão é a sigla da associação; o usuário pode ajustar na tabela
-    pesquisa: r.pesquisa || r.sigla || r.rotulo || "",
-    removido: false,
-    encontravelManual: false,
-  }));
-}
-
-// Acrescenta à lista os registros da base que ainda não existem nela, casando
-// por chave. Sem isso, quem já tem cache (ou banco) de um deploy anterior
-// nunca enxerga as associações que entraram na base depois — foi o que fez a
-// aba Associações continuar com 56 em vez de 168.
-// registros gravados antes da coluna Pesquisa chegam sem ela; a sigla é o
-// ponto de partida natural da busca
-const ehSoftaliza = (u) => /(^|\/\/|\.)softaliza\.com\.br/i.test(u || "");
-
-function normalizarSeo(lista) {
-  return lista.map((r) => ({
-    ...r,
-    pesquisa: r.pesquisa != null && r.pesquisa !== "" ? r.pesquisa : r.sigla || r.rotulo || "",
-    removido: !!r.removido,
-    // registros de deploys anteriores não trazem a regra do domínio
-    dominioSoftaliza: r.dominioSoftaliza != null ? !!r.dominioSoftaliza : ehSoftaliza(r.url) || ehSoftaliza(r.urlFinal),
-    conformidade: r.conformidade || (ehSoftaliza(r.url) || ehSoftaliza(r.urlFinal) ? "fechar" : "ok"),
-  }));
-}
-
-function completarComBase(lista, base, chaveDe) {
-  const vistos = new Set(lista.map(chaveDe));
-  const novos = base.filter((r) => !vistos.has(chaveDe(r)));
-  return { lista: novos.length ? [...lista, ...novos] : lista, novos };
-}
-
-// A varredura é refeita de tempos em tempos e a semente vem com data nova. Aqui
-// os campos medidos são atualizados, mas o que é seu — a marcação de indexado e
-// uma correção manual de "na busca" — permanece.
-function mesclarSeoComBase(lista, base) {
-  const porId = new Map(base.map((b) => [b.seoId, b]));
-  const atualizados = [];
+// A varredura é refeita de tempos em tempos e a semente chega com data nova.
+// Os campos medidos atualizam; o que é seu (situação, nova versão, marcações
+// de SEO, histórico) permanece. Quem não está na semente entra como novo.
+function mesclarComBase(lista, base) {
+  const porId = new Map(base.map((b) => [b.id, b]));
+  let atualizados = 0;
 
   const mesclada = lista.map((r) => {
-    const b = porId.get(r.seoId);
-    // registro criado à mão não tem par na semente e nunca é tocado aqui
-    if (!b || !b.auditadoEm || b.auditadoEm <= (r.auditadoEm || "")) return r;
-    atualizados.push(b.seoId);
-    return {
-      ...b,
-      // tudo que é do usuário sobrevive à varredura nova
-      indexado: !!r.indexado,
-      pesquisa: r.pesquisa,
-      removido: !!r.removido,
-      manual: !!r.manual,
-      encontravelManual: !!r.encontravelManual,
-      encontravel: r.encontravelManual ? r.encontravel : b.encontravel,
-    };
+    const b = porId.get(r.id);
+    if (!b || !b.verificadoEm || b.verificadoEm <= (r.verificadoEm || "")) return r;
+    atualizados++;
+    const seo = b.seo
+      ? {
+          ...b.seo,
+          indexado: !!(r.seo && r.seo.indexado),
+          pesquisa: (r.seo && r.seo.pesquisa) || b.seo.pesquisa,
+          encontravelManual: !!(r.seo && r.seo.encontravelManual),
+          encontravel: r.seo && r.seo.encontravelManual ? r.seo.encontravel : b.seo.encontravel,
+        }
+      : r.seo;
+    return { ...r, seo, rodapeSoftaliza: b.rodapeSoftaliza, noAr: b.noAr, verificadoEm: b.verificadoEm };
   });
 
-  const vistos = new Set(lista.map((r) => r.seoId));
-  const novos = base.filter((b) => !vistos.has(b.seoId));
-  return { lista: [...mesclada, ...novos], novos, atualizados: atualizados.length };
+  const vistos = new Set(lista.map((r) => r.id));
+  const novos = base.filter((b) => !vistos.has(b.id));
+  return { lista: [...mesclada, ...novos], novos, atualizados };
 }
 
-function lerCache(chave) {
+// Tabelas antigas (associações, eventos, seo) viram sites. Roda uma vez, quando
+// a tabela de sites ainda está vazia, para não perder o que já foi editado.
+function migrarLegado(legado) {
+  const seoPor = new Map((legado.seo || []).map((r) => [r.seo_id, r]));
+  const sites = [];
+
+  (legado.associacoes || [])
+    .filter((a) => a.site_conosco && !a.removido)
+    .forEach((a) => {
+      const s = seoPor.get(`associacao:${a.chave}`);
+      sites.push(
+        normalizarSite({
+          id: `assoc:${a.chave}`,
+          tipo: "associacao",
+          nome: a.sigla || a.chave,
+          nomeCompleto: a.nome,
+          url: a.endereco,
+          plataforma: a.site_atual,
+          situacao: a.nova_versao === "feita" ? "pronto" : a.site_atual === "wordpress" ? "remodelar" : "pronto",
+          novaVersao: a.nova_versao,
+          enderecoNovo: a.endereco_novo,
+          saude: a.saude,
+          mrr: a.mrr,
+          seo: s ? seoLegado(s) : null,
+          historico: [{ em: hoje(), texto: "Migrado das tabelas antigas do painel." }],
+        })
+      );
+    });
+
+  (legado.eventos || [])
+    .filter((e) => !e.removido)
+    .forEach((e) => {
+      const s = seoPor.get(`evento:${e.id}`);
+      sites.push(
+        normalizarSite({
+          id: `evento:${e.id}`,
+          tipo: "evento",
+          nome: e.nome_curto || e.nome,
+          nomeCompleto: e.nome,
+          url: e.endereco,
+          plataforma: e.site_atual,
+          statusEvento: e.status,
+          ano: e.ano,
+          seo: s ? seoLegado(s) : null,
+          historico: [{ em: hoje(), texto: "Migrado das tabelas antigas do painel." }],
+        })
+      );
+    });
+
+  // registros de SEO criados à mão, sem associação nem evento por trás
+  (legado.seo || [])
+    .filter((s) => s.dados && s.dados.manual && !(s.dados.removido))
+    .forEach((s) => {
+      sites.push(
+        normalizarSite({
+          id: `manual:${s.seo_id}`,
+          tipo: s.tipo,
+          nome: s.rotulo,
+          url: s.url,
+          plataforma: "wordpress",
+          seo: seoLegado(s),
+          manual: true,
+          historico: [{ em: hoje(), texto: "Migrado da aba SEOs." }],
+        })
+      );
+    });
+
+  return sites;
+}
+
+function seoLegado(s) {
+  const d = s.dados || {};
+  return {
+    encontravel: s.encontravel,
+    conformidade: d.conformidade,
+    dominioSoftaliza: d.dominioSoftaliza,
+    indexavel: d.indexavel,
+    siglaNoTitulo: d.siglaNoTitulo,
+    titulo: s.titulo,
+    urlFinal: s.url_final,
+    problemas: d.problemas,
+    lacunas: d.lacunas,
+    auditadoEm: s.auditado_em,
+    indexado: s.indexado,
+    pesquisa: d.pesquisa,
+    encontravelManual: d.encontravelManual,
+  };
+}
+
+function lerCache() {
   try {
-    const v = JSON.parse(localStorage.getItem(chave));
-    return Array.isArray(v) && v.length ? v : null;
+    const v = JSON.parse(localStorage.getItem(CACHE_SITES));
+    return Array.isArray(v) && v.length ? v.map(normalizarSite) : null;
   } catch (e) {
     return null;
   }
@@ -117,11 +200,9 @@ function lerCache(chave) {
 
 function gravarCache() {
   try {
-    localStorage.setItem(CACHE_ASSOC, JSON.stringify(ASSOCIACOES));
-    localStorage.setItem(CACHE_EVENTO, JSON.stringify(EVENTOS));
-    localStorage.setItem(CACHE_SEO, JSON.stringify(SEO));
+    localStorage.setItem(CACHE_SITES, JSON.stringify(SITES));
   } catch (e) {
-    /* cota estourada ou modo privado — o banco continua sendo a verdade */
+    /* cota ou modo privado — o banco continua sendo a verdade */
   }
 }
 
@@ -136,11 +217,10 @@ function marcarSincronia(texto, classe) {
   el.className = `sync-status ${classe}`;
 }
 
-// grava linha a linha, juntando rajadas de edição num envio só
-function enfileirar(tipo, registro) {
+function salvarSite(s) {
   gravarCache();
   if (!BANCO.ativo) return;
-  BANCO.fila.set(`${tipo}:${registro.seoId || registro.chave || registro.id}`, { tipo, registro });
+  BANCO.fila.set(s.id, s);
   clearTimeout(BANCO.timer);
   BANCO.timer = setTimeout(descarregarFila, 900);
 }
@@ -153,12 +233,12 @@ async function descarregarFila() {
   marcarSincronia("Salvando…", "s-sync");
 
   let falhou = false;
-  for (const item of lote) {
+  for (const site of lote) {
     try {
       const r = await fetch(API, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(item),
+        body: JSON.stringify({ site }),
       });
       if (!r.ok) falhou = true;
     } catch (e) {
@@ -171,21 +251,16 @@ async function descarregarFila() {
   if (BANCO.fila.size) descarregarFila();
 }
 
-async function semearBanco() {
-  marcarSincronia("Preparando banco…", "s-sync");
+async function enviarLote(sites) {
+  if (!BANCO.ativo || !sites.length) return;
+  marcarSincronia("Gravando…", "s-sync");
   try {
     const r = await fetch(API, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ associacoes: ASSOCIACOES, eventos: EVENTOS, seo: SEO }),
+      body: JSON.stringify({ sites }),
     });
-    if (!r.ok) {
-      const corpo = await r.json().catch(() => ({}));
-      marcarSincronia("Falha ao semear", "s-erro");
-      console.warn("Semeadura falhou:", corpo);
-      return;
-    }
-    marcarSincronia("Salvo no banco", "s-ok");
+    marcarSincronia(r.ok ? "Salvo no banco" : "Falha ao gravar", r.ok ? "s-ok" : "s-erro");
   } catch (e) {
     marcarSincronia("Sem conexão", "s-erro");
   }
@@ -201,7 +276,7 @@ async function carregarDoBanco() {
   if (!r.ok) return null;
   try {
     const corpo = await r.json();
-    if (!corpo || !Array.isArray(corpo.associacoes)) return null;
+    if (!corpo || !Array.isArray(corpo.sites)) return null;
     BANCO.ativo = true;
     return corpo;
   } catch (e) {
@@ -209,24 +284,43 @@ async function carregarDoBanco() {
   }
 }
 
+async function carregarModelo() {
+  const remoto = await carregarDoBanco();
+  const base = semearSites();
+
+  if (remoto && remoto.sites.length) {
+    const m = mesclarComBase(remoto.sites.map(normalizarSite), base);
+    SITES = m.lista;
+    gravarCache();
+    marcarSincronia("Salvo no banco", "s-ok");
+    if (m.novos.length || m.atualizados) await enviarLote(m.atualizados ? SITES : m.novos);
+    return;
+  }
+
+  if (remoto && remoto.legado) {
+    // tabela nova vazia: migra o que as antigas tinham e completa com a semente
+    const migrados = migrarLegado(remoto.legado);
+    const m = mesclarComBase(migrados, base);
+    SITES = m.lista;
+    gravarCache();
+    await enviarLote(SITES);
+    return;
+  }
+
+  // banco indisponível: espelho local, completado pela semente
+  const cache = lerCache();
+  SITES = cache ? mesclarComBase(cache, base).lista : base;
+  gravarCache();
+  if (BANCO.ativo) await enviarLote(SITES);
+  else marcarSincronia("Só neste navegador", "s-off");
+}
+
 // ---------------------------------------------------------------------------
-// Escrita no modelo
+// Histórico
 // ---------------------------------------------------------------------------
 
-function salvarAssoc(a) {
-  enfileirar("associacao", a);
-}
-
-function salvarEvento(e) {
-  enfileirar("evento", e);
-}
-
-function salvarSeo(r) {
-  enfileirar("seo", r);
-}
-
-function novaChave(prefixo) {
-  return `${prefixo}-${Date.now().toString(36)}`;
+function registrar(site, texto) {
+  site.historico = [...(site.historico || []), { em: hoje(), texto }];
 }
 
 // ---------------------------------------------------------------------------
@@ -234,41 +328,35 @@ function novaChave(prefixo) {
 // ---------------------------------------------------------------------------
 
 const STATE = {
-  tab: "assoc",
-  assoc: { q: "", saude: "", site: "", sort: { col: "sigla", dir: "asc" } },
-  evento: { q: "", status: "", site: "", sort: { col: "nome", dir: "asc" } },
-  remodela: { q: "", nv: "", origem: "" },
-  carteira: { q: "", conosco: "", saude: "", sort: { col: "sigla", dir: "asc" } },
-  seo: { q: "", veredito: "", tipo: "", statusEvento: "", conformidade: "", sort: { col: "veredito", dir: "asc" } },
+  tab: "sites",
+  sites: { q: "", tipo: "", situacao: "", saude: "", sort: { col: "nome", dir: "asc" } },
+  remodelar: { q: "", tipo: "", nv: "" },
+  seo: { q: "", veredito: "", conformidade: "", evento: "", sort: { col: "seo", dir: "asc" } },
+  prospectos: { q: "", saude: "", sort: { col: "mrr", dir: "desc" } },
 };
 
-const VIEW = { assoc: [], evento: [], remodela: [], carteira: [], seo: [] };
+const VIEW = { sites: [], remodelar: [], seo: [], prospectos: [] };
 
 const PAGES = {
-  assoc: {
-    title: "Sites",
-    sub: "As associações cujo site é conosco, com tipo e endereço de cada um.",
-    add: "Nova associação",
+  sites: {
+    title: "Todos os sites",
+    sub: "Cada site da Softaliza, de associação ou de evento, com situação, saúde e histórico.",
+    add: "Novo site",
   },
-  evento: {
-    title: "Sites de eventos",
-    sub: "Congressos e eventos, com site próprio ou ainda no WordPress padrão.",
-    add: "Novo evento",
-  },
-  carteira: {
-    title: "Associações",
-    sub: "Todo o roster do SoftaHub — quais têm site conosco e quais não.",
-    add: "Nova associação",
+  remodelar: {
+    title: "Remodelar",
+    sub: "Os sites marcados para remodelar, ordenados por MRR — quem paga mais entra primeiro.",
+    add: "Novo site",
   },
   seo: {
-    title: "SEOs",
-    sub: "Indexabilidade e SEO on-page dos sites no ar — associações e eventos ativos.",
-    add: "Novo SEO",
+    title: "SEO e saúde",
+    sub: "Se aparece na busca, se a indexação segue a regra do domínio, se credita a Softaliza no rodapé e se está no ar.",
+    add: "Novo site",
   },
-  remodela: {
-    title: "Remodelar",
-    sub: "Os sites conosco, ordenados por MRR — quem paga mais entra primeiro na régua.",
-    add: "Adicionar à remodelação",
+  prospectos: {
+    title: "Sem site conosco",
+    sub: "Associações do SoftaHub que ainda não têm site com a Softaliza — e poderiam ter.",
+    add: "Novo site",
   },
 };
 
@@ -276,29 +364,44 @@ const PAGES = {
 // Opções e rótulos
 // ---------------------------------------------------------------------------
 
-const SITE_ATUAL_OPTIONS = [
+const PLATAFORMA_OPTIONS = [
   { value: "wordpress", label: "WordPress" },
   { value: "personalizado", label: "Personalizado" },
   { value: "hotsite", label: "Hotsite" },
 ];
 
-const STATUS_OPTIONS = [
-  { value: "a_acontecer", label: "A acontecer" },
-  { value: "acontecendo", label: "Acontecendo" },
-  { value: "realizado", label: "Realizado" },
+const SITUACAO_OPTIONS = [
+  { value: "pronto", label: "Pronto" },
+  { value: "remodelar", label: "Remodelar" },
+  { value: "construcao", label: "Em construção" },
+  { value: "desativado", label: "Desativado" },
+];
+const SITUACAO_META = {
+  pronto: { label: "Pronto", cls: "b-ok" },
+  remodelar: { label: "Remodelar", cls: "b-warn" },
+  construcao: { label: "Em construção", cls: "b-accent" },
+  desativado: { label: "Desativado", cls: "b-off" },
+};
+const SITUACAO_ORDER = { remodelar: 0, construcao: 1, pronto: 2, desativado: 3 };
+
+const TIPO_OPTIONS = [
+  { value: "associacao", label: "Associação" },
+  { value: "evento", label: "Evento" },
 ];
 
-// "não" marca o que não será remodelado: sai da conta de progresso e vai para
-// o fim da lista
-const NOVA_VERSAO_OPTIONS = [
+const NV_OPTIONS = [
   { value: "feita", label: "Feito" },
   { value: "pendente", label: "Pendente" },
   { value: "nao", label: "Não" },
 ];
-
 const NV_ORDER = { pendente: 0, feita: 1, nao: 2 };
-const SAUDE_ORDER = { risco: 0, atencao: 1, saudavel: 2, cancelado: 3 };
-const STATUS_ORDER = { acontecendo: 0, a_acontecer: 1, realizado: 2 };
+
+const STATUS_EVENTO_OPTIONS = [
+  { value: "a_acontecer", label: "A acontecer" },
+  { value: "acontecendo", label: "Acontecendo" },
+  { value: "realizado", label: "Realizado" },
+];
+const STATUS_EVENTO_LABEL = { a_acontecer: "a acontecer", acontecendo: "acontecendo", realizado: "realizado" };
 
 const SAUDE_META = {
   saudavel: { label: "Saudável", cls: "b-ok" },
@@ -306,10 +409,27 @@ const SAUDE_META = {
   risco: { label: "Risco", cls: "b-risk" },
   cancelado: { label: "Cancelado", cls: "b-off" },
 };
+const SAUDE_ORDER = { risco: 0, atencao: 1, saudavel: 2, cancelado: 3 };
 
-const SITE_TIPO_BADGE = {
-  personalizado: { label: "Personalizado", cls: "b-accent" },
-  hotsite: { label: "Hotsite", cls: "b-ok" },
+const ENCONTRAVEL_META = {
+  forte: { label: "SEO Pronto", cls: "b-ok", ordem: 0 },
+  provavel: { label: "SEO Bom", cls: "b-accent", ordem: 1 },
+  fraco: { label: "SEO Configurando", cls: "b-warn", ordem: 2 },
+  nao: { label: "Sem SEO", cls: "b-risk", ordem: 3 },
+};
+const ENCONTRAVEL_OPTIONS = [
+  { value: "forte", label: "SEO Pronto" },
+  { value: "provavel", label: "SEO Bom" },
+  { value: "fraco", label: "SEO Configurando" },
+  { value: "nao", label: "Sem SEO" },
+];
+
+// endereço em softaliza.com.br deve pedir noindex; domínio próprio, o contrário
+const CONFORMIDADE_META = {
+  ok: { label: "Correto", cls: "b-ok" },
+  fechar: { label: "Fechar", cls: "b-warn", dica: "endereço softaliza aberto — deveria pedir noindex" },
+  abrir: { label: "Liberar", cls: "b-risk", dica: "domínio próprio bloqueado — deveria indexar" },
+  "fora-do-ar": { label: "Fora do ar", cls: "b-none", dica: "não dá para avaliar" },
 };
 
 const ANO_ATUAL = new Date().getFullYear();
@@ -340,31 +460,24 @@ function labelOf(options, value) {
   return found ? found.label : value || "—";
 }
 
-function saudeBadge(saude) {
-  const meta = SAUDE_META[saude];
-  if (!meta) return '<span class="badge b-none">Sem dado</span>';
-  return `<span class="badge ${meta.cls}"><i></i>${meta.label}</span>`;
-}
-
-// WordPress é a regra na aba Remodelar; repetir o selo em toda linha não informa
-// nada, então marcamos só a exceção
-function siteTipoBadge(tipo) {
-  const meta = SITE_TIPO_BADGE[tipo];
-  if (!meta) return "";
-  return `<span class="badge ${meta.cls} badge-sm"><i></i>${meta.label}</span>`;
+function badge(meta, extra) {
+  if (!meta) return '<span class="badge b-none">—</span>';
+  return `<span class="badge ${meta.cls}"${extra ? ` title="${esc(extra)}"` : ""}><i></i>${meta.label}</span>`;
 }
 
 const ICON = {
   open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6"/></svg>',
+  detail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
   alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
   inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h5l2 3h4l2-3h5"/><path d="M5 5h14l2 7v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6Z"/></svg>',
 };
 
-const AV_HUES = [258, 224, 196, 162, 130, 42, 16, 338];
+const AV_HUES = [172, 196, 224, 258, 130, 42, 16, 338];
 
 function avatarHue(text) {
   const s = text || "?";
@@ -377,8 +490,8 @@ function initials(text) {
   return (text || "?").replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?";
 }
 
-function avatar(sigla) {
-  return `<span class="avatar" style="--av:${avatarHue(sigla)}" aria-hidden="true">${esc(initials(sigla))}</span>`;
+function avatar(nome) {
+  return `<span class="avatar" style="--av:${avatarHue(nome)}" aria-hidden="true">${esc(initials(nome))}</span>`;
 }
 
 function selectField(cls, dataAttr, value, options) {
@@ -398,20 +511,11 @@ function linkCell(cls, dataAttr, value) {
 }
 
 function switchField(cls, dataAttr, checked) {
-  return `<label class="switch">
-    <input type="checkbox" class="${cls}" ${dataAttr} ${checked ? "checked" : ""} />
-    <span class="track"></span>
-  </label>`;
+  return `<label class="switch"><input type="checkbox" class="${cls}" ${dataAttr} ${checked ? "checked" : ""} /><span class="track"></span></label>`;
 }
 
 function emptyRow(cols, title, msg) {
-  return `<tr class="empty-row"><td colspan="${cols}">
-    <div class="empty">
-      <div class="empty-icon">${ICON.inbox}</div>
-      <h3>${title}</h3>
-      <p>${msg}</p>
-    </div>
-  </td></tr>`;
+  return `<tr class="empty-row"><td colspan="${cols}"><div class="empty"><div class="empty-icon">${ICON.inbox}</div><h3>${title}</h3><p>${msg}</p></div></td></tr>`;
 }
 
 function metricsHtml(items) {
@@ -434,12 +538,7 @@ function compositionHtml(title, segs) {
     .map((s) => `<div class="comp-seg ${s.cls}" style="flex:${s.count}" title="${s.label}: ${s.count}"></div>`)
     .join("");
   const legend = segs
-    .map(
-      (s) =>
-        `<span class="comp-key"><i class="${s.cls}"></i>${s.label} <b>${s.count}</b><span class="muted">${Math.round(
-          (s.count / base) * 100
-        )}%</span></span>`
-    )
+    .map((s) => `<span class="comp-key"><i class="${s.cls}"></i>${s.label} <b>${s.count}</b><span class="muted">${Math.round((s.count / base) * 100)}%</span></span>`)
     .join("");
   return `<div class="composition">
     <div class="comp-head"><span class="comp-title">${title}</span><span class="comp-total">${total}</span></div>
@@ -448,13 +547,31 @@ function compositionHtml(title, segs) {
   </div>`;
 }
 
-function pct(part, total) {
-  if (!total) return 0;
-  return Math.round((part / total) * 100);
-}
+const pct = (part, total) => (total ? Math.round((part / total) * 100) : 0);
+const moeda = (v) => currency.format(Math.round(v || 0));
 
-function moeda(v) {
-  return currency.format(Math.round(v || 0));
+// as três checagens de um site, em pílulas curtas
+function checksHtml(s) {
+  const ar = s.noAr == null ? ["c-unk", "Ar ?"] : s.noAr ? ["c-ok", "No ar"] : ["c-bad", "Fora do ar"];
+  const rod =
+    s.noAr === false || s.rodapeSoftaliza == null
+      ? ["c-unk", "Rodapé ?"]
+      : s.rodapeSoftaliza
+        ? ["c-ok", "Rodapé"]
+        : ["c-warn", "Sem rodapé"];
+  const seo = !s.seo
+    ? ["c-unk", "SEO ?"]
+    : s.seo.encontravel === "nao"
+      ? ["c-bad", "Sem SEO"]
+      : s.seo.encontravel === "fraco"
+        ? ["c-warn", "SEO fraco"]
+        : ["c-ok", "SEO ok"];
+  const quando = s.verificadoEm ? ` · verificado em ${s.verificadoEm}` : "";
+  return `<div class="checks" title="${esc(`${ar[1]} · ${rod[1]} · ${seo[1]}${quando}`)}">
+    <span class="check ${ar[0]}"><i></i>${ar[1]}</span>
+    <span class="check ${rod[0]}"><i></i>${rod[1]}</span>
+    <span class="check ${seo[0]}"><i></i>${seo[1]}</span>
+  </div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -479,7 +596,6 @@ function confirmDialog(title, message, okLabel) {
   document.getElementById("dlg-confirm-sub").textContent = message;
   const ok = document.getElementById("dlg-confirm-ok");
   ok.textContent = okLabel || "Excluir";
-
   return new Promise((resolve) => {
     function done(value) {
       ok.removeEventListener("click", onOk);
@@ -495,199 +611,71 @@ function confirmDialog(title, message, okLabel) {
   });
 }
 
-const ADD_FORMS = {
-  assoc: {
-    title: "Nova associação",
-    sub: "Entra na lista e é gravada no banco.",
-    fields: [
-      { name: "sigla", label: "Sigla", ph: "ex.: ABC", required: true },
-      { name: "nome", label: "Nome completo", ph: "Opcional", hint: "Pode preencher depois direto na tabela." },
-    ],
-    submit: (v) => criarAssociacao(v, false),
-  },
-  evento: {
-    title: "Novo evento",
-    sub: "Para eventos que ainda não estão na base.",
-    fields: [
-      { name: "nome", label: "Nome do evento", ph: "ex.: Congresso Brasileiro de…", required: true },
-      { name: "sigla", label: "Sigla", ph: "Opcional" },
-    ],
-    submit: (v) => {
-      const e = {
-        id: novaChave("evento"),
-        nomeCurto: null,
-        nome: v.nome,
-        sigla: v.sigla || null,
-        ano: ANO_ATUAL,
-        status: "a_acontecer",
-        siteAtual: "wordpress",
-        endereco: "",
-        removido: false,
-      };
-      EVENTOS.push(e);
-      salvarEvento(e);
-      renderEvento();
-      return { message: "Evento adicionado." };
-    },
-  },
-  carteira: {
-    title: "Nova associação",
-    sub: "Entra no roster e é gravada no banco.",
-    fields: [
-      { name: "sigla", label: "Sigla", ph: "ex.: ABC", required: true },
-      { name: "nome", label: "Nome completo", ph: "Opcional" },
-    ],
-    submit: (v) => criarAssociacao(v, false),
-  },
-  seo: {
-    title: "Novo SEO",
-    sub: "Um site para acompanhar aqui. Fica só nesta aba — não entra em Sites, Eventos nem Associações.",
-    fields: [
-      { name: "rotulo", label: "Nome do site", ph: "ex.: ABC ou Congresso Brasileiro de…", required: true },
-      { name: "url", label: "Endereço", ph: "ex.: abc.org.br", required: true },
-      { name: "sigla", label: "Sigla", ph: "Opcional", hint: "Vira o termo da coluna Pesquisa. Sem ela, entra o nome do site." },
-      {
-        name: "tipo",
-        label: "Tipo",
-        options: [
-          { value: "associacao", label: "Associação" },
-          { value: "evento", label: "Evento" },
-        ],
-      },
-    ],
-    submit: (v) => criarSeo(v),
-  },
-  remodela: {
-    title: "Adicionar à remodelação",
-    sub: "Marca a associação como site conosco. Se a sigla já existir, ela é reaproveitada.",
-    fields: [
-      { name: "sigla", label: "Sigla", ph: "ex.: ABC", required: true },
-      { name: "nome", label: "Nome completo", ph: "Opcional" },
-    ],
-    submit: (v) => criarAssociacao(v, true),
-  },
-};
+const ADD_FIELDS = [
+  { name: "nome", label: "Nome ou sigla", ph: "ex.: ABC ou Congresso Brasileiro de…", required: true },
+  { name: "nomeCompleto", label: "Nome completo", ph: "Opcional" },
+  { name: "url", label: "Endereço", ph: "ex.: abc.org.br", required: true },
+  { name: "tipo", label: "Tipo", options: TIPO_OPTIONS },
+  { name: "plataforma", label: "Plataforma", options: PLATAFORMA_OPTIONS },
+];
 
-function criarAssociacao(v, comoSite) {
-  const alvo = v.sigla.trim().toUpperCase();
-  const existente = ASSOCIACOES.find((a) => (a.sigla || "").toUpperCase() === alvo);
-
-  if (existente) {
-    if (!existente.removido && !comoSite) {
-      return { error: `Já existe uma associação com a sigla "${v.sigla}".` };
-    }
-    existente.removido = false;
-    if (comoSite) existente.siteConosco = true;
-    if (v.nome) existente.nome = v.nome;
-    salvarAssoc(existente);
-  } else {
-    const a = {
-      chave: novaChave("assoc"),
-      sigla: v.sigla,
-      nome: v.nome || null,
-      saude: null,
-      mrr: null,
-      siteAtual: "wordpress",
-      endereco: "",
-      siteConosco: comoSite,
-      novaVersao: "pendente",
-      enderecoNovo: "",
-      removido: false,
-    };
-    ASSOCIACOES.push(a);
-    salvarAssoc(a);
-  }
-
-  renderAssoc();
-  renderRemodela();
-  renderCarteira();
-  return { message: comoSite ? `"${v.sigla}" entrou na aba Remodelar.` : `"${v.sigla}" adicionada.` };
-}
-
-// Registro de SEO criado à mão: vive só nesta aba, sem associação nem evento
-// por trás. Nasce sem varredura, então os campos da auditoria ficam vazios e a
-// situação começa em "SEO Configurando", para o usuário ajustar.
-function criarSeo(v) {
+function criarSite(v) {
   const url = v.url.trim();
-  const tipo = v.tipo === "evento" ? "evento" : "associacao";
-  const jaTem = SEO.find((r) => !r.removido && displayLink(r.url) === displayLink(url));
-  if (jaTem) return { error: `"${jaTem.rotulo}" já acompanha esse endereço.` };
+  const repetido = SITES.find((s) => !s.removido && displayLink(s.url).toLowerCase() === displayLink(url).toLowerCase());
+  if (repetido) return { error: `"${repetido.nome}" já usa esse endereço.` };
 
-  const chave = novaChave("seo");
-  const r = {
-    seoId: `${tipo}:${chave}`,
-    chave,
-    tipo,
-    rotulo: v.rotulo,
-    sigla: v.sigla || null,
+  const s = normalizarSite({
+    id: `manual:${Date.now().toString(36)}`,
+    tipo: v.tipo,
+    nome: v.nome.trim(),
+    nomeCompleto: v.nomeCompleto.trim() || null,
     url,
-    statusEvento: tipo === "evento" ? "a_acontecer" : null,
-    encontravel: "fraco",
-    indexado: false,
-    titulo: null,
-    urlFinal: null,
-    auditadoEm: null,
-    pesquisa: v.sigla || v.rotulo,
-    removido: false,
+    plataforma: v.plataforma,
+    situacao: v.plataforma === "wordpress" ? "remodelar" : "construcao",
+    statusEvento: v.tipo === "evento" ? "a_acontecer" : null,
+    ano: v.tipo === "evento" ? ANO_ATUAL : null,
     manual: true,
-    lacunas: [],
-    problemas: [],
-    avisos: [],
-  };
-
-  SEO.push(r);
-  salvarSeo(r);
-  renderSeo();
-  return { message: `"${r.rotulo}" entrou na aba SEOs.` };
+    historico: [{ em: hoje(), texto: "Cadastrado à mão no painel." }],
+  });
+  SITES.push(s);
+  salvarSite(s);
+  renderTudo();
+  return { message: `"${s.nome}" entrou nos sites.`, id: s.id };
 }
 
-function openAddDialog() {
-  const cfg = ADD_FORMS[STATE.tab];
+let ADD_PREFILL = null;
+
+function openAddDialog(prefill) {
+  ADD_PREFILL = prefill || null;
   const dlg = document.getElementById("dlg-add");
   const body = document.getElementById("dlg-add-body");
-
-  document.getElementById("dlg-add-title").textContent = cfg.title;
-  document.getElementById("dlg-add-sub").textContent = cfg.sub;
   body.innerHTML =
-    cfg.fields
-      .map((f) => {
-        const controle =
-          f.options
-            ? `<select id="add-${f.name}" name="${f.name}">${f.options
-                .map((o) => `<option value="${o.value}">${o.label}</option>`)
-                .join("")}</select>`
-            : `<input type="text" id="add-${f.name}" name="${f.name}" placeholder="${esc(f.ph || "")}" autocomplete="off" />`;
-        return `<div class="field">
-          <label for="add-${f.name}">${f.label}</label>
-          ${controle}
-          ${f.hint ? `<div class="hint">${f.hint}</div>` : ""}
-        </div>`;
-      })
-      .join("") + '<div class="modal-error" id="dlg-add-error"></div>';
-
+    ADD_FIELDS.map((f) => {
+      const val = (prefill && prefill[f.name]) || "";
+      const controle = f.options
+        ? `<select id="add-${f.name}" name="${f.name}">${f.options.map((o) => `<option value="${o.value}" ${o.value === val ? "selected" : ""}>${o.label}</option>`).join("")}</select>`
+        : `<input type="text" id="add-${f.name}" name="${f.name}" value="${esc(val)}" placeholder="${esc(f.ph || "")}" autocomplete="off" />`;
+      return `<div class="field"><label for="add-${f.name}">${f.label}</label>${controle}</div>`;
+    }).join("") + '<div class="modal-error" id="dlg-add-error"></div>';
   dlg.showModal();
-  const first = body.querySelector("input, select");
+  const first = body.querySelector("input");
   if (first) first.focus();
 }
 
 function submitAddDialog() {
-  const cfg = ADD_FORMS[STATE.tab];
   const dlg = document.getElementById("dlg-add");
   const errorBox = document.getElementById("dlg-add-error");
   const values = {};
-  cfg.fields.forEach((f) => {
-    values[f.name] = (document.getElementById(`add-${f.name}`).value || "").trim();
-  });
+  ADD_FIELDS.forEach((f) => (values[f.name] = (document.getElementById(`add-${f.name}`).value || "").trim()));
 
-  const missing = cfg.fields.find((f) => f.required && !values[f.name]);
+  const missing = ADD_FIELDS.find((f) => f.required && !values[f.name]);
   if (missing) {
     errorBox.textContent = `Preencha o campo "${missing.label}".`;
     errorBox.classList.add("on");
     document.getElementById(`add-${missing.name}`).focus();
     return;
   }
-
-  const result = cfg.submit(values) || {};
+  const result = criarSite(values);
   if (result.error) {
     errorBox.textContent = result.error;
     errorBox.classList.add("on");
@@ -695,104 +683,113 @@ function submitAddDialog() {
   }
   errorBox.classList.remove("on");
   dlg.close();
-  renderNavCounts();
-  toast(result.message || "Adicionado.");
+  toast(result.message);
+  // leva para a aba Sites, com o novo já visível e aberto no detalhe
+  setTab("sites");
+  openDrawer(result.id);
 }
 
 // ---------------------------------------------------------------------------
 // Ordenação
 // ---------------------------------------------------------------------------
 
-function sortList(list, sort, tipo) {
+function ordenar(list, sort) {
   const dir = sort.dir === "desc" ? -1 : 1;
   const col = sort.col;
   return [...list].sort((a, b) => {
     let x;
     let y;
-    if (col === "mrr" || col === "ano") {
-      x = a[col] == null ? -1 : a[col];
-      y = b[col] == null ? -1 : b[col];
+    if (col === "mrr") {
+      x = a.mrr == null ? -1 : a.mrr;
+      y = b.mrr == null ? -1 : b.mrr;
     } else if (col === "saude") {
-      x = SAUDE_ORDER[a.saude] == null ? 9 : SAUDE_ORDER[a.saude];
-      y = SAUDE_ORDER[b.saude] == null ? 9 : SAUDE_ORDER[b.saude];
-    } else if (col === "status") {
-      x = STATUS_ORDER[a.status] == null ? 9 : STATUS_ORDER[a.status];
-      y = STATUS_ORDER[b.status] == null ? 9 : STATUS_ORDER[b.status];
-    } else if (col === "nome" && tipo === "evento") {
-      x = (a.nomeCurto || a.nome || "").toLowerCase();
-      y = (b.nomeCurto || b.nome || "").toLowerCase();
+      x = SAUDE_ORDER[a.saude] ?? 9;
+      y = SAUDE_ORDER[b.saude] ?? 9;
+    } else if (col === "situacao") {
+      x = SITUACAO_ORDER[a.situacao] ?? 9;
+      y = SITUACAO_ORDER[b.situacao] ?? 9;
+    } else if (col === "seo") {
+      x = a.seo ? ENCONTRAVEL_META[a.seo.encontravel].ordem : 9;
+      y = b.seo ? ENCONTRAVEL_META[b.seo.encontravel].ordem : 9;
+      // pior primeiro quando ascendente, que é o que se quer olhar
+      x = -x;
+      y = -y;
     } else {
       x = (a[col] || "").toString().toLowerCase();
       y = (b[col] || "").toString().toLowerCase();
     }
     if (x < y) return -1 * dir;
     if (x > y) return 1 * dir;
-    return 0;
+    return (a.nome || a.sigla || "").localeCompare(b.nome || b.sigla || "", "pt-BR");
   });
 }
 
+const ativos = () => SITES.filter((s) => !s.removido);
+const buscaBate = (s, q) => !q || `${s.nome} ${s.nomeCompleto || ""} ${s.url}`.toLowerCase().includes(q);
+
 // ---------------------------------------------------------------------------
-// Aba: Sites (todas as associações)
+// Aba: Sites
 // ---------------------------------------------------------------------------
 
-function renderAssocMetrics(list) {
+function renderSitesMetrics(list) {
   const total = list.length;
-  const saudavel = list.filter((a) => a.saude === "saudavel").length;
-  const atencao = list.filter((a) => a.saude === "atencao").length;
-  const risco = list.filter((a) => a.saude === "risco").length;
-  const cancelado = list.filter((a) => a.saude === "cancelado").length;
-  const wordpress = list.filter((a) => a.siteAtual === "wordpress").length;
-  const personalizado = list.filter((a) => a.siteAtual === "personalizado").length;
-  const hotsite = list.filter((a) => a.siteAtual === "hotsite").length;
-  const conosco = list.filter((a) => a.siteConosco).length;
-  const mrr = list.reduce((s, a) => s + (a.mrr || 0), 0);
+  const prontos = list.filter((s) => s.situacao === "pronto").length;
+  const remodelar = list.filter((s) => s.situacao === "remodelar").length;
+  const foraDoAr = list.filter((s) => s.noAr === false).length;
+  const semRodape = list.filter((s) => s.noAr && s.rodapeSoftaliza === false).length;
+  const mrr = list.reduce((a, s) => a + (s.mrr || 0), 0);
 
-  document.getElementById("assoc-metrics").innerHTML = metricsHtml([
-    { label: "Associações", value: total, note: `${total - conosco} sem site conosco` },
-    { label: "MRR somado", value: moeda(mrr), money: true, note: "Receita recorrente do recorte" },
-    { label: "Site conosco", value: conosco, dot: "d-accent", note: `${pct(conosco, total)}% do recorte` },
-    { label: "Fora do WordPress", value: personalizado + hotsite, dot: "d-ok", note: `${pct(personalizado + hotsite, total)}% já migrado` },
+  document.getElementById("sites-metrics").innerHTML = metricsHtml([
+    { label: "Sites", value: total, note: `${list.filter((s) => s.tipo === "associacao").length} associações · ${list.filter((s) => s.tipo === "evento").length} eventos` },
+    { label: "Prontos", value: prontos, dot: "d-ok", note: `${pct(prontos, total)}% do recorte` },
+    { label: "Para remodelar", value: remodelar, dot: "d-warn", note: `${moeda(mrr)} de MRR no recorte` },
+    { label: "Fora do ar", value: foraDoAr, dot: "d-risk", note: `${semRodape} no ar sem o rodapé` },
   ]);
 
-  document.getElementById("assoc-composition").innerHTML =
-    compositionHtml("Saúde da carteira", [
-      { cls: "s-ok", label: "Saudável", count: saudavel },
-      { cls: "s-warn", label: "Atenção", count: atencao },
-      { cls: "s-risk", label: "Risco", count: risco },
-      { cls: "s-off", label: "Cancelado", count: cancelado },
+  document.getElementById("sites-composition").innerHTML =
+    compositionHtml("Situação", [
+      { cls: "s-ok", label: "Pronto", count: prontos },
+      { cls: "s-warn", label: "Remodelar", count: remodelar },
+      { cls: "s-accent", label: "Em construção", count: list.filter((s) => s.situacao === "construcao").length },
+      { cls: "s-off", label: "Desativado", count: list.filter((s) => s.situacao === "desativado").length },
     ]) +
-    compositionHtml("Tipo de site", [
-      { cls: "s-off", label: "WordPress", count: wordpress },
-      { cls: "s-accent", label: "Personalizado", count: personalizado },
-      { cls: "s-ok", label: "Hotsite", count: hotsite },
+    compositionHtml("Plataforma", [
+      { cls: "s-off", label: "WordPress", count: list.filter((s) => s.plataforma === "wordpress").length },
+      { cls: "s-accent", label: "Personalizado", count: list.filter((s) => s.plataforma === "personalizado").length },
+      { cls: "s-ok", label: "Hotsite", count: list.filter((s) => s.plataforma === "hotsite").length },
     ]);
 }
 
-function renderAssocTable(list) {
-  const tbody = document.getElementById("assoc-table-body");
+function identCell(s) {
+  const sub = s.tipo === "evento" ? `evento${s.statusEvento ? ` · ${STATUS_EVENTO_LABEL[s.statusEvento]}` : ""}${s.ano ? ` · ${s.ano}` : ""}` : "associação";
+  return `<div class="ident">
+    ${avatar(s.nome)}
+    <div class="ident-fields">
+      <span class="seo-nome">${esc(s.nome)}</span>
+      <span class="f-sub" style="padding:0 1px">${esc(s.nomeCompleto || "")}</span>
+      <span class="tipo-tag">${sub}</span>
+    </div>
+  </div>`;
+}
+
+function renderSitesTable(list) {
+  const tbody = document.getElementById("sites-table-body");
   if (!list.length) {
-    tbody.innerHTML = emptyRow(6, "Nada por aqui", "Nenhum site bate com esses filtros. Marque <strong>Site conosco</strong> na aba Associações.");
+    tbody.innerHTML = emptyRow(7, "Nada por aqui", "Nenhum site bate com esses filtros. Use “Novo site” para cadastrar.");
     return;
   }
-
   tbody.innerHTML = list
-    .map((a) => {
-      const k = `data-key="${esc(a.chave)}"`;
-      return `<tr>
-        <td class="ident-td" data-l="Associação">
-          <div class="ident">
-            ${avatar(a.sigla)}
-            <div class="ident-fields">
-              <input class="f f-strong a-sigla" type="text" ${k} value="${esc(a.sigla)}" placeholder="Sigla" />
-              <input class="f f-sub a-nome" type="text" ${k} value="${esc(a.nome)}" placeholder="Nome completo" />
-            </div>
-          </div>
-        </td>
-        <td data-l="Saúde">${saudeBadge(a.saude)}</td>
-        <td class="num" data-l="MRR">${a.mrr != null ? moeda(a.mrr) : '<span class="muted">—</span>'}</td>
-        <td data-l="Site atual">${selectField("a-tipo", k, a.siteAtual, SITE_ATUAL_OPTIONS)}</td>
-        <td data-l="Endereço">${linkCell("a-endereco", k, a.endereco)}</td>
+    .map((s) => {
+      const k = `data-id="${esc(s.id)}"`;
+      return `<tr class="abre" ${k}>
+        <td class="ident-td" data-l="Site">${identCell(s)}</td>
+        <td data-l="Plataforma">${selectField("s-plataforma", k, s.plataforma, PLATAFORMA_OPTIONS)}</td>
+        <td data-l="Situação">${selectField(`nv-select sit-${s.situacao} s-situacao`, k, s.situacao, SITUACAO_OPTIONS)}</td>
+        <td data-l="Endereço">${linkCell("s-url", k, s.url)}</td>
+        <td data-l="Checagens">${checksHtml(s)}</td>
+        <td class="num" data-l="MRR">${s.mrr != null ? moeda(s.mrr) : '<span class="muted">—</span>'}</td>
         <td class="actions" data-l="">
+          <button class="mini" type="button" data-act="detail" ${k} title="Detalhes e histórico" aria-label="Detalhes">${ICON.detail}</button>
           <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
         </td>
       </tr>`;
@@ -800,784 +797,523 @@ function renderAssocTable(list) {
     .join("");
 }
 
-function renderAssoc() {
-  const s = STATE.assoc;
-  const filtered = ASSOCIACOES.filter((a) => {
-    if (a.removido || !a.siteConosco) return false;
-    if (s.q && !`${a.sigla} ${a.nome || ""}`.toLowerCase().includes(s.q)) return false;
-    if (s.saude && a.saude !== s.saude) return false;
-    if (s.site && a.siteAtual !== s.site) return false;
+function renderSites() {
+  const st = STATE.sites;
+  const filtered = ativos().filter((s) => {
+    if (!buscaBate(s, st.q)) return false;
+    if (st.tipo && s.tipo !== st.tipo) return false;
+    if (st.situacao && s.situacao !== st.situacao) return false;
+    if (st.saude === "fora-do-ar" && s.noAr !== false) return false;
+    if (st.saude === "sem-rodape" && !(s.noAr && s.rodapeSoftaliza === false)) return false;
+    if (st.saude === "sem-seo" && !(s.seo && s.seo.encontravel === "nao")) return false;
     return true;
   });
-
-  const sorted = sortList(filtered, s.sort, "assoc");
-  VIEW.assoc = sorted;
-
-  renderAssocMetrics(sorted);
-  renderAssocTable(sorted);
+  const sorted = ordenar(filtered, st.sort);
+  VIEW.sites = sorted;
+  renderSitesMetrics(sorted);
+  renderSitesTable(sorted);
   syncTableFit();
-
-  const totalAtivas = ASSOCIACOES.filter((a) => !a.removido && a.siteConosco).length;
-  document.getElementById("assoc-count").textContent =
-    sorted.length === totalAtivas ? `${totalAtivas} no total` : `${sorted.length} de ${totalAtivas}`;
+  const total = ativos().length;
+  document.getElementById("sites-count").textContent = sorted.length === total ? `${total} no total` : `${sorted.length} de ${total}`;
   renderNavCounts();
 }
 
-function handleAssocEdit(ev) {
+function siteDe(el) {
+  const id = el.dataset.id;
+  return id ? SITES.find((s) => s.id === id) : null;
+}
+
+function handleSitesEdit(ev) {
   const el = ev.target;
-  const chave = el.dataset.key;
-  if (!chave) return;
-  const a = ASSOCIACOES.find((x) => x.chave === chave);
-  if (!a) return;
-
-  if (el.classList.contains("a-tipo")) {
-    a.siteAtual = el.value;
-    renderAssoc();
-    renderRemodela();
-  } else if (el.classList.contains("a-endereco")) {
-    a.endereco = el.value;
+  const s = siteDe(el);
+  if (!s) return;
+  if (el.classList.contains("s-plataforma")) {
+    registrar(s, `Plataforma: ${labelOf(PLATAFORMA_OPTIONS, s.plataforma)} → ${labelOf(PLATAFORMA_OPTIONS, el.value)}.`);
+    s.plataforma = el.value;
+  } else if (el.classList.contains("s-situacao")) {
+    registrar(s, `Situação: ${SITUACAO_META[s.situacao].label} → ${SITUACAO_META[el.value].label}.`);
+    s.situacao = el.value;
+  } else if (el.classList.contains("s-url")) {
+    registrar(s, `Endereço: ${s.url || "(vazio)"} → ${el.value || "(vazio)"}.`);
+    s.url = el.value;
+    salvarSite(s);
     refreshLinkButtons(el);
-  } else if (el.classList.contains("a-sigla")) {
-    a.sigla = el.value;
-    renderAssoc();
-    renderRemodela();
-  } else if (el.classList.contains("a-nome")) {
-    a.nome = el.value;
-  } else if (el.classList.contains("a-conosco")) {
-    a.siteConosco = el.checked;
-    salvarAssoc(a);
-    renderAssoc();
-    renderRemodela();
-    toast(el.checked ? `"${a.sigla}" entrou na aba Remodelar.` : `"${a.sigla}" saiu da aba Remodelar.`, "info");
     return;
-  } else {
-    return;
-  }
-  salvarAssoc(a);
+  } else return;
+  salvarSite(s);
+  renderTudo();
 }
 
-async function handleAssocClick(ev) {
+async function handleSitesClick(ev) {
   const btn = ev.target.closest("button[data-act]");
-  if (!btn) return;
-  const a = ASSOCIACOES.find((x) => x.chave === btn.dataset.key);
-  if (!a) return;
-
-  if (btn.dataset.act === "open") return openLink(a.endereco);
-  if (btn.dataset.act === "copy") return copyLink(a.endereco);
-
-  if (btn.dataset.act === "del") {
-    const ok = await confirmDialog(
-      "Excluir associação",
-      `"${a.sigla}" sai do painel. O registro continua no banco, marcado como removido.`,
-      "Excluir"
-    );
-    if (!ok) return;
-    a.removido = true;
-    salvarAssoc(a);
-    renderAssoc();
-    renderRemodela();
-    toast(`"${a.sigla}" excluída.`);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Aba: Associações (roster completo do SoftaHub)
-// ---------------------------------------------------------------------------
-
-function renderCarteiraMetrics(list) {
-  const total = list.length;
-  const conosco = list.filter((a) => a.siteConosco).length;
-  const saudavel = list.filter((a) => a.saude === "saudavel").length;
-  const atencao = list.filter((a) => a.saude === "atencao").length;
-  const risco = list.filter((a) => a.saude === "risco").length;
-  const cancelado = list.filter((a) => a.saude === "cancelado").length;
-  const semDado = total - saudavel - atencao - risco - cancelado;
-  const mrr = list.reduce((s, a) => s + (a.mrr || 0), 0);
-  const mrrConosco = list.filter((a) => a.siteConosco).reduce((s, a) => s + (a.mrr || 0), 0);
-
-  document.getElementById("carteira-metrics").innerHTML = metricsHtml([
-    { label: "Associações", value: total, note: `${semDado} sem dado de saúde` },
-    { label: "Site conosco", value: conosco, dot: "d-accent", note: `${pct(conosco, total)}% da carteira` },
-    { label: "Sem site conosco", value: total - conosco, dot: "d-off", note: "Oportunidade de migração" },
-    { label: "MRR conosco", value: moeda(mrrConosco), money: true, note: `de ${moeda(mrr)} na carteira` },
-  ]);
-
-  document.getElementById("carteira-composition").innerHTML = compositionHtml("Saúde da carteira", [
-    { cls: "s-ok", label: "Saudável", count: saudavel },
-    { cls: "s-warn", label: "Atenção", count: atencao },
-    { cls: "s-risk", label: "Risco", count: risco },
-    { cls: "s-off", label: "Cancelado", count: cancelado },
-  ]);
-}
-
-function renderCarteiraTable(list) {
-  const tbody = document.getElementById("carteira-table-body");
-  if (!list.length) {
-    tbody.innerHTML = emptyRow(6, "Nada por aqui", "Nenhuma associação bate com esses filtros.");
+  if (btn) {
+    const s = siteDe(btn);
+    if (!s) return;
+    if (btn.dataset.act === "open") return openLink(s.url);
+    if (btn.dataset.act === "copy") return copyLink(s.url);
+    if (btn.dataset.act === "detail") return openDrawer(s.id);
+    if (btn.dataset.act === "del") return excluirSite(s);
     return;
   }
+  // clique na linha, fora de campo, abre o detalhe
+  if (ev.target.closest("input, select, a, label")) return;
+  const tr = ev.target.closest("tr[data-id]");
+  if (tr) openDrawer(tr.dataset.id);
+}
 
+async function excluirSite(s) {
+  const ok = await confirmDialog("Excluir site", `"${s.nome}" sai do painel. O registro continua no banco, marcado como removido.`, "Excluir");
+  if (!ok) return;
+  s.removido = true;
+  registrar(s, "Removido do painel.");
+  salvarSite(s);
+  closeDrawer();
+  renderTudo();
+  toast(`"${s.nome}" excluído.`);
+}
+
+// ---------------------------------------------------------------------------
+// Aba: Remodelar
+// ---------------------------------------------------------------------------
+
+const fila = () => ativos().filter((s) => s.situacao === "remodelar" || (s.situacao === "pronto" && s.novaVersao === "feita" && s.plataforma === "wordpress"));
+
+function rankBadge(rank) {
+  const cls = rank <= 3 ? " r-top" : rank <= 10 ? " r-mid" : "";
+  return `<span class="rank${cls}">${rank}º</span>`;
+}
+
+function renderRemodelarMetrics(lista) {
+  const total = lista.length;
+  const feitas = lista.filter((s) => s.novaVersao === "feita").length;
+  const pendentes = lista.filter((s) => s.novaVersao === "pendente").length;
+  const nao = lista.filter((s) => s.novaVersao === "nao").length;
+  const previstas = total - nao;
+  const mrrPendente = lista.filter((s) => s.novaVersao === "pendente").reduce((a, s) => a + (s.mrr || 0), 0);
+
+  document.getElementById("remodelar-metrics").innerHTML = metricsHtml([
+    { label: "Na fila", value: total, dot: "d-warn", note: `${lista.filter((s) => s.tipo === "evento").length} eventos` },
+    { label: "Novas versões prontas", value: feitas, dot: "d-ok", note: `${pct(feitas, previstas)}% do previsto` },
+    { label: "Pendentes", value: pendentes, dot: "d-warn", note: nao ? `${nao} marcada(s) como “Não”` : "Ainda no modelo antigo" },
+    { label: "MRR represado", value: moeda(mrrPendente), money: true, note: "Só das pendentes" },
+  ]);
+  const prog = document.getElementById("remodelar-progress");
+  prog.innerHTML = previstas
+    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(feitas, previstas)}%"></div></div><span>${feitas}/${previstas} concluídas</span>`
+    : "";
+}
+
+function renderRemodelarTable(list) {
+  const tbody = document.getElementById("remodelar-table-body");
+  if (!list.length) {
+    tbody.innerHTML = emptyRow(7, "Fila vazia", "Nenhum site marcado para remodelar bate com esses filtros.");
+    return;
+  }
   tbody.innerHTML = list
-    .map((a) => {
-      const k = `data-key="${esc(a.chave)}"`;
-      return `<tr>
-        <td class="ident-td" data-l="Associação">
-          <div class="ident">
-            ${avatar(a.sigla)}
-            <div class="ident-fields">
-              <input class="f f-strong c-sigla" type="text" ${k} value="${esc(a.sigla)}" placeholder="Sigla" />
-              <input class="f f-sub c-nome" type="text" ${k} value="${esc(a.nome)}" placeholder="Nome completo" />
-            </div>
-          </div>
-        </td>
-        <td data-l="Saúde">${saudeBadge(a.saude)}</td>
-        <td class="num" data-l="MRR">${a.mrr != null ? moeda(a.mrr) : '<span class="muted">—</span>'}</td>
-        <td data-l="Endereço">${linkCell("c-endereco", k, a.endereco)}</td>
-        <td class="center" data-l="Site conosco">${switchField("c-conosco", k, a.siteConosco)}</td>
-        <td class="actions" data-l="">
-          <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
-        </td>
+    .map((s) => {
+      const k = `data-id="${esc(s.id)}"`;
+      const cls = s.novaVersao === "feita" ? "done" : s.novaVersao === "nao" ? "skip" : "";
+      return `<tr class="abre ${cls}" ${k}>
+        <td data-l="Prioridade">${rankBadge(s._rank)}</td>
+        <td class="ident-td" data-l="Site">${identCell(s)}</td>
+        <td class="num" data-l="MRR"><input class="f f-num r-mrr" type="text" inputmode="decimal" ${k} value="${s.mrr != null ? s.mrr : ""}" placeholder="0" /></td>
+        <td data-l="Endereço atual">${linkCell("r-url", k, s.url)}</td>
+        <td data-l="Nova versão">${selectField(`nv-select nv-${s.novaVersao} r-nv`, k, s.novaVersao, NV_OPTIONS)}</td>
+        <td data-l="Endereço novo">${linkCell("r-novo", k, s.enderecoNovo)}</td>
+        <td class="actions" data-l=""><button class="mini" type="button" data-act="detail" ${k} title="Detalhes" aria-label="Detalhes">${ICON.detail}</button></td>
       </tr>`;
     })
     .join("");
 }
 
-function renderCarteira() {
-  const s = STATE.carteira;
-  const filtered = ASSOCIACOES.filter((a) => {
-    if (a.removido) return false;
-    if (s.q && !`${a.sigla} ${a.nome || ""}`.toLowerCase().includes(s.q)) return false;
-    if (s.conosco === "sim" && !a.siteConosco) return false;
-    if (s.conosco === "nao" && a.siteConosco) return false;
-    if (s.saude && a.saude !== s.saude) return false;
-    return true;
-  });
-
-  const sorted = sortList(filtered, s.sort, "carteira");
-  VIEW.carteira = sorted;
-
-  renderCarteiraMetrics(sorted);
-  renderCarteiraTable(sorted);
+function renderRemodelar() {
+  const st = STATE.remodelar;
+  const lista = fila().sort((x, y) => (y.mrr || 0) - (x.mrr || 0));
+  const ranked = lista.map((s, i) => ({ ...s, _rank: i + 1 }));
+  const ordered = [...ranked].sort((a, b) => NV_ORDER[a.novaVersao] - NV_ORDER[b.novaVersao]);
+  const filtered = ordered.filter((s) => buscaBate(s, st.q) && (!st.tipo || s.tipo === st.tipo) && (!st.nv || s.novaVersao === st.nv));
+  VIEW.remodelar = filtered;
+  renderRemodelarMetrics(lista);
+  renderRemodelarTable(filtered);
   syncTableFit();
-
-  const total = ASSOCIACOES.filter((a) => !a.removido).length;
-  document.getElementById("carteira-count").textContent =
-    sorted.length === total ? `${total} no total` : `${sorted.length} de ${total}`;
+  document.getElementById("remodelar-count").textContent = filtered.length === lista.length ? `${lista.length} na fila` : `${filtered.length} de ${lista.length}`;
   renderNavCounts();
 }
 
-function handleCarteiraEdit(ev) {
+function handleRemodelarEdit(ev) {
   const el = ev.target;
-  const chave = el.dataset.key;
-  if (!chave) return;
-  const a = ASSOCIACOES.find((x) => x.chave === chave);
-  if (!a) return;
-
-  if (el.classList.contains("c-conosco")) {
-    a.siteConosco = el.checked;
-    salvarAssoc(a);
-    renderCarteira();
-    renderAssoc();
-    renderRemodela();
-    toast(el.checked ? `"${a.sigla}" passou a ter site conosco.` : `"${a.sigla}" deixou de ter site conosco.`, "info");
+  const s = siteDe(el);
+  if (!s) return;
+  if (el.classList.contains("r-nv")) {
+    registrar(s, `Nova versão: ${labelOf(NV_OPTIONS, s.novaVersao)} → ${labelOf(NV_OPTIONS, el.value)}.`);
+    s.novaVersao = el.value;
+    if (el.value === "feita" && s.situacao === "remodelar") {
+      s.situacao = "pronto";
+      registrar(s, "Situação: Remodelar → Pronto, pela nova versão feita.");
+    }
+    salvarSite(s);
+    renderTudo();
+    toast({ feita: `Nova versão de "${s.nome}" feita.`, pendente: `"${s.nome}" voltou para pendente.`, nao: `"${s.nome}" marcada como “Não”.` }[el.value], "info");
     return;
   }
-
-  if (el.classList.contains("c-sigla")) {
-    a.sigla = el.value;
-    renderCarteira();
-    renderAssoc();
-    renderRemodela();
-  } else if (el.classList.contains("c-nome")) {
-    a.nome = el.value;
-  } else if (el.classList.contains("c-endereco")) {
-    a.endereco = el.value;
+  if (el.classList.contains("r-novo")) {
+    s.enderecoNovo = el.value;
+    registrar(s, `Endereço novo: ${el.value || "(vazio)"}.`);
+    salvarSite(s);
     refreshLinkButtons(el);
-  } else {
     return;
   }
-  salvarAssoc(a);
-}
-
-async function handleCarteiraClick(ev) {
-  const btn = ev.target.closest("button[data-act]");
-  if (!btn) return;
-  const a = ASSOCIACOES.find((x) => x.chave === btn.dataset.key);
-  if (!a) return;
-
-  if (btn.dataset.act === "open") return openLink(a.endereco);
-  if (btn.dataset.act === "copy") return copyLink(a.endereco);
-
-  if (btn.dataset.act === "del") {
-    const ok = await confirmDialog(
-      "Excluir associação",
-      `"${a.sigla}" sai do painel inteiro, inclusive das abas Sites e Remodelar.`,
-      "Excluir"
-    );
-    if (!ok) return;
-    a.removido = true;
-    salvarAssoc(a);
-    renderCarteira();
-    renderAssoc();
-    renderRemodela();
-    toast(`"${a.sigla}" excluída.`);
+  if (el.classList.contains("r-url")) {
+    s.url = el.value;
+    salvarSite(s);
+    refreshLinkButtons(el);
+    return;
+  }
+  if (el.classList.contains("r-mrr")) {
+    const n = parseFloat(el.value.replace(/[^\d.,]/g, "").replace(",", "."));
+    s.mrr = Number.isFinite(n) ? n : null;
+    salvarSite(s);
+    renderTudo();
   }
 }
 
-// ---------------------------------------------------------------------------
-// Aba: SEOs
-//
-// Resultado da varredura registrada em data.js. Mede indexabilidade e SEO
-// on-page; não mede se o Google já indexou, o que exigiria o Search Console.
-// ---------------------------------------------------------------------------
-
-const ENCONTRAVEL_META = {
-  forte: { label: "SEO Pronto", cls: "b-ok", ordem: 0 },
-  provavel: { label: "SEO Bom", cls: "b-accent", ordem: 1 },
-  fraco: { label: "SEO Configurando", cls: "b-warn", ordem: 2 },
-  nao: { label: "Sem SEO", cls: "b-risk", ordem: 3 },
-};
-
-const ENCONTRAVEL_OPTIONS = [
-  { value: "forte", label: "SEO Pronto" },
-  { value: "provavel", label: "SEO Bom" },
-  { value: "fraco", label: "SEO Configurando" },
-  { value: "nao", label: "Sem SEO" },
-];
-
-const STATUS_EVENTO_LABEL = {
-  a_acontecer: "a acontecer",
-  acontecendo: "acontecendo",
-  realizado: "realizado",
-};
-
-// Endereço em softaliza.com.br é provisório e deve pedir noindex, para não
-// disputar busca com o domínio próprio do cliente. Em domínio próprio vale o
-// contrário: tem que estar liberado.
-const CONFORMIDADE_META = {
-  ok: { label: "Correto", cls: "b-ok" },
-  fechar: { label: "Fechar", cls: "b-warn", dica: "endereço softaliza aberto — deveria pedir noindex" },
-  abrir: { label: "Liberar", cls: "b-risk", dica: "domínio próprio bloqueado — deveria indexar" },
-  "fora-do-ar": { label: "Fora do ar", cls: "b-none", dica: "não dá para avaliar" },
-};
-
-function conformidadeBadge(r) {
-  const meta = CONFORMIDADE_META[r.conformidade];
-  if (!meta) return '<span class="muted">—</span>';
-  const onde = r.dominioSoftaliza ? "softaliza.com.br" : "domínio próprio";
-  const titulo = meta.dica ? `${onde} · ${meta.dica}` : onde;
-  return `<span class="badge ${meta.cls}" title="${esc(titulo)}"><i></i>${meta.label}</span>
-    <div class="seo-tipo">${r.dominioSoftaliza ? "softaliza" : "próprio"}</div>`;
+function handleRemodelarClick(ev) {
+  const btn = ev.target.closest("button[data-act]");
+  if (btn) {
+    const s = siteDe(btn);
+    if (!s) return;
+    if (btn.dataset.act === "detail") return openDrawer(s.id);
+    const input = btn.parentElement.querySelector("input");
+    const v = input ? input.value : "";
+    if (btn.dataset.act === "open") return openLink(v);
+    if (btn.dataset.act === "copy") return copyLink(v);
+    return;
+  }
+  if (ev.target.closest("input, select, a, label")) return;
+  const tr = ev.target.closest("tr[data-id]");
+  if (tr) openDrawer(tr.dataset.id);
 }
+
+// ---------------------------------------------------------------------------
+// Aba: SEO e saúde
+// ---------------------------------------------------------------------------
 
 function renderSeoMetrics(list) {
   const total = list.length;
-  const cont = (v) => list.filter((r) => r.encontravel === v).length;
-  const bem = cont("forte") + cont("provavel");
-  const nao = cont("nao");
-  const eventos = list.filter((r) => r.tipo === "evento").length;
-  const indexados = list.filter((r) => r.indexado).length;
-  const fechar = list.filter((r) => r.conformidade === "fechar").length;
-  const abrir = list.filter((r) => r.conformidade === "abrir").length;
-  const foraDaRegra = fechar + abrir;
+  const com = list.filter((s) => s.seo);
+  const bem = com.filter((s) => s.seo.encontravel === "forte" || s.seo.encontravel === "provavel").length;
+  const nao = com.filter((s) => s.seo.encontravel === "nao").length;
+  const fechar = com.filter((s) => s.seo.conformidade === "fechar").length;
+  const abrir = com.filter((s) => s.seo.conformidade === "abrir").length;
+  const noAr = list.filter((s) => s.noAr).length;
+  const semRodape = list.filter((s) => s.noAr && s.rodapeSoftaliza === false).length;
+  const indexados = com.filter((s) => s.seo.indexado).length;
 
   document.getElementById("seo-metrics").innerHTML = metricsHtml([
-    {
-      label: "Sites verificados",
-      value: total,
-      note: `${eventos} eventos e ${total - eventos} associações`,
-    },
-    { label: "SEO pronto ou bom", value: bem, dot: "d-ok", note: `${pct(bem, total)}% do total` },
-    { label: "Sem SEO", value: nao, dot: "d-risk", note: "Bloqueados, fora do ar ou atrás de login" },
-    { label: "Indexação fora da regra", value: foraDaRegra, dot: "d-warn", note: `${fechar} a fechar, ${abrir} a liberar` },
+    { label: "No ar", value: noAr, dot: "d-ok", note: `${total - noAr} fora do ar ou sem checagem` },
+    { label: "Sem rodapé Softaliza", value: semRodape, dot: "d-warn", note: "Entre os que estão no ar" },
+    { label: "SEO pronto ou bom", value: bem, dot: "d-accent", note: `${nao} sem SEO` },
+    { label: "Indexação fora da regra", value: fechar + abrir, dot: "d-risk", note: `${fechar} a fechar, ${abrir} a liberar` },
   ]);
 
   document.getElementById("seo-composition").innerHTML =
     compositionHtml("Busca pela sigla ou nome", [
-      { cls: "s-ok", label: "SEO Pronto", count: cont("forte") },
-      { cls: "s-accent", label: "SEO Bom", count: cont("provavel") },
-      { cls: "s-warn", label: "SEO Configurando", count: cont("fraco") },
+      { cls: "s-ok", label: "SEO Pronto", count: com.filter((s) => s.seo.encontravel === "forte").length },
+      { cls: "s-accent", label: "SEO Bom", count: com.filter((s) => s.seo.encontravel === "provavel").length },
+      { cls: "s-warn", label: "Configurando", count: com.filter((s) => s.seo.encontravel === "fraco").length },
       { cls: "s-risk", label: "Sem SEO", count: nao },
     ]) +
-    compositionHtml("Indexação pela regra do domínio", [
-      { cls: "s-ok", label: "Correto", count: list.filter((r) => r.conformidade === "ok").length },
-      { cls: "s-warn", label: "Fechar (softaliza aberto)", count: fechar },
-      { cls: "s-risk", label: "Liberar (próprio bloqueado)", count: abrir },
-      { cls: "s-off", label: "Fora do ar", count: list.filter((r) => r.conformidade === "fora-do-ar").length },
+    compositionHtml("Rodapé e disponibilidade", [
+      { cls: "s-ok", label: "No ar com rodapé", count: list.filter((s) => s.noAr && s.rodapeSoftaliza).length },
+      { cls: "s-warn", label: "No ar sem rodapé", count: semRodape },
+      { cls: "s-risk", label: "Fora do ar", count: list.filter((s) => s.noAr === false).length },
+      { cls: "s-off", label: "Sem checagem", count: list.filter((s) => s.noAr == null).length },
     ]);
 
   const prog = document.getElementById("seo-progress");
-  prog.innerHTML = total
-    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(indexados, total)}%"></div></div>
-       <span>${indexados}/${total} conferidos</span>`
+  prog.innerHTML = com.length
+    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(indexados, com.length)}%"></div></div><span>${indexados}/${com.length} conferidos como indexados</span>`
     : "";
 }
 
 function renderSeoTable(list) {
   const tbody = document.getElementById("seo-table-body");
   if (!list.length) {
-    tbody.innerHTML = emptyRow(5, "Nada por aqui", "Nenhum site bate com esses filtros.");
+    tbody.innerHTML = emptyRow(7, "Nada por aqui", "Nenhum site bate com esses filtros.");
     return;
   }
-
   tbody.innerHTML = list
-    .map((r) => {
-      const k = `data-seo="${esc(r.seoId)}"`;
-      const base = r.tipo === "evento" ? `evento · ${STATUS_EVENTO_LABEL[r.statusEvento] || "—"}` : "associação";
-      const sub = r.manual ? `${base} · fora da varredura` : base;
-
-      return `<tr>
-        <td class="ident-td" data-l="Site">
-          <div class="ident">
-            ${avatar(r.sigla || r.rotulo)}
-            <div class="ident-fields">
-              <span class="seo-nome">${esc(r.rotulo)}</span>
-              <a class="seo-url" href="${esc(withProto(r.url))}" target="_blank" rel="noopener noreferrer" title="${esc(r.url)}">${esc(displayLink(r.url))}</a>
-            </div>
-          </div>
-        </td>
-        <td data-l="Na busca">
-          ${selectField(`nv-select enc-${r.encontravel} seo-encontravel`, k, r.encontravel, ENCONTRAVEL_OPTIONS)}
-          <div class="seo-tipo">${sub}</div>
-        </td>
-        <td class="center" data-l="Indexado?">${switchField("seo-indexado", k, r.indexado)}</td>
-        <td data-l="Indexação">${conformidadeBadge(r)}</td>
-        <td data-l="Pesquisa">
-          <input class="f seo-pesquisa" type="text" ${k} value="${esc(r.pesquisa || "")}" placeholder="Sigla da associação" />
-          ${r.urlFinal ? `<div class="seo-redir" title="${esc(r.urlFinal)}">vai para ${esc(displayLink(r.urlFinal))}</div>` : ""}
-        </td>
-        <td class="actions" data-l="">
-          <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
-        </td>
+    .map((s) => {
+      const k = `data-id="${esc(s.id)}"`;
+      const seo = s.seo;
+      const conf = seo && CONFORMIDADE_META[seo.conformidade];
+      const ar = s.noAr == null ? badge(null) : s.noAr ? badge({ label: "No ar", cls: "b-ok" }) : badge({ label: "Fora do ar", cls: "b-risk" });
+      const rod =
+        s.noAr === false || s.rodapeSoftaliza == null
+          ? badge(null)
+          : s.rodapeSoftaliza
+            ? badge({ label: "Softaliza", cls: "b-ok" })
+            : badge({ label: "Sem rodapé", cls: "b-warn" });
+      return `<tr class="abre" ${k}>
+        <td class="ident-td" data-l="Site">${identCell(s)}</td>
+        <td data-l="Na busca">${seo ? selectField(`nv-select enc-${seo.encontravel} q-enc`, k, seo.encontravel, ENCONTRAVEL_OPTIONS) : '<span class="muted">fora da varredura</span>'}</td>
+        <td class="center" data-l="Indexado?">${seo ? switchField("q-idx", k, seo.indexado) : ""}</td>
+        <td data-l="Indexação">${conf ? badge(conf, `${seo.dominioSoftaliza ? "softaliza.com.br" : "domínio próprio"}${conf.dica ? " · " + conf.dica : ""}`) : badge(null)}<div class="seo-tipo">${seo ? (seo.dominioSoftaliza ? "softaliza" : "próprio") : ""}</div></td>
+        <td data-l="Rodapé">${rod}</td>
+        <td data-l="No ar">${ar}</td>
+        <td data-l="Pesquisa">${seo ? `<input class="f q-pesq" type="text" ${k} value="${esc(seo.pesquisa)}" placeholder="termo da busca" />` : ""}</td>
       </tr>`;
     })
     .join("");
 }
 
 function renderSeo() {
-  const s = STATE.seo;
-  const filtered = SEO.filter((r) => {
-    if (r.removido) return false;
-    if (
-      s.q &&
-      !`${r.rotulo} ${r.sigla || ""} ${r.url} ${r.titulo || ""} ${r.pesquisa || ""}`.toLowerCase().includes(s.q)
-    )
-      return false;
-    if (s.veredito && r.encontravel !== s.veredito) return false;
-    if (s.tipo && r.tipo !== s.tipo) return false;
-    if (s.statusEvento && r.statusEvento !== s.statusEvento) return false;
-    if (s.conformidade && r.conformidade !== s.conformidade) return false;
+  const st = STATE.seo;
+  const filtered = ativos().filter((s) => {
+    if (!buscaBate(s, st.q)) return false;
+    if (st.veredito && !(s.seo && s.seo.encontravel === st.veredito)) return false;
+    if (st.conformidade && !(s.seo && s.seo.conformidade === st.conformidade)) return false;
+    if (st.evento === "ativos" && !(s.tipo === "evento" && s.statusEvento !== "realizado")) return false;
+    if (st.evento === "associacao" && s.tipo !== "associacao") return false;
     return true;
   });
-
-  const sorted = [...filtered].sort((a, b) => {
-    const d = s.sort.dir === "desc" ? -1 : 1;
-    if (s.sort.col === "veredito") {
-      const x = (ENCONTRAVEL_META[a.encontravel] || {}).ordem;
-      const y = (ENCONTRAVEL_META[b.encontravel] || {}).ordem;
-      if (x !== y) return (y - x) * d;
-    }
-    return a.rotulo.localeCompare(b.rotulo, "pt-BR") * d;
-  });
-
+  const sorted = ordenar(filtered, st.sort);
   VIEW.seo = sorted;
-
   renderSeoMetrics(sorted);
   renderSeoTable(sorted);
   syncTableFit();
-
-  const totalSeo = SEO.filter((r) => !r.removido).length;
-  document.getElementById("seo-count").textContent =
-    sorted.length === totalSeo ? `${totalSeo} no total` : `${sorted.length} de ${totalSeo}`;
-
-  const data = (SEO.find((r) => r.auditadoEm) || {}).auditadoEm || null;
+  const total = ativos().length;
+  document.getElementById("seo-count").textContent = sorted.length === total ? `${total} no total` : `${sorted.length} de ${total}`;
+  const data = (SITES.find((s) => s.verificadoEm) || {}).verificadoEm;
   document.getElementById("seo-nota").innerHTML = data
-    ? `Varredura de <strong>${data}</strong> nos endereços da aba Sites e nos eventos a acontecer ou acontecendo. A coluna <strong>Na busca</strong> começa com o resultado automático — se a página permite ser indexada e se a sigla e o nome estão no título, H1 e meta description — e você pode corrigir à mão. <strong>Indexado?</strong> é marcação sua, para registrar o que já conferiu na busca de verdade. <strong>Pesquisa</strong> guarda o termo usado nessa conferência: começa com a sigla da associação e você pode trocar.`
+    ? `Varredura de <strong>${data}</strong>. <strong>Na busca</strong> nasce do resultado automático — se a página permite ser indexada e se a sigla e o nome estão no título, H1 e meta description — e pode ser corrigido à mão. <strong>Indexação</strong> aplica a regra do domínio: endereço softaliza.com.br deve pedir noindex; domínio próprio deve estar liberado. <strong>Rodapé</strong> procura o nome Softaliza no rodapé da página. <strong>Indexado?</strong> é marcação sua.`
     : "";
   renderNavCounts();
 }
 
 function handleSeoEdit(ev) {
   const el = ev.target;
-  const id = el.dataset.seo;
-  if (!id) return;
-  const r = SEO.find((x) => x.seoId === id);
-  if (!r) return;
-
-  if (el.classList.contains("seo-encontravel")) {
-    r.encontravel = el.value;
-    r.encontravelManual = true;
-    salvarSeo(r);
-    renderSeo();
+  const s = siteDe(el);
+  if (!s || !s.seo) return;
+  if (el.classList.contains("q-enc")) {
+    registrar(s, `Na busca: ${ENCONTRAVEL_META[s.seo.encontravel].label} → ${ENCONTRAVEL_META[el.value].label} (manual).`);
+    s.seo.encontravel = el.value;
+    s.seo.encontravelManual = true;
+  } else if (el.classList.contains("q-idx")) {
+    s.seo.indexado = el.checked;
+    registrar(s, el.checked ? "Conferido como indexado na busca." : "Desmarcado como indexado.");
+  } else if (el.classList.contains("q-pesq")) {
+    s.seo.pesquisa = el.value;
+    salvarSite(s);
     return;
-  }
-
-  if (el.classList.contains("seo-indexado")) {
-    r.indexado = el.checked;
-    salvarSeo(r);
-    renderSeo();
-    toast(el.checked ? `"${r.rotulo}" marcado como indexado.` : `"${r.rotulo}" desmarcado.`, "info");
-    return;
-  }
-
-  if (el.classList.contains("seo-pesquisa")) {
-    r.pesquisa = el.value;
-    salvarSeo(r);
-  }
+  } else return;
+  salvarSite(s);
+  renderTudo();
 }
 
-async function handleSeoClick(ev) {
-  const btn = ev.target.closest("button[data-act]");
-  if (!btn) return;
-  const r = SEO.find((x) => x.seoId === btn.dataset.seo);
-  if (!r) return;
-
-  if (btn.dataset.act === "del") {
-    const ok = await confirmDialog(
-      "Excluir da aba SEOs",
-      `"${r.rotulo}" sai desta aba. O registro continua no banco, marcado como removido, e as outras abas não mudam.`,
-      "Excluir"
-    );
-    if (!ok) return;
-    r.removido = true;
-    salvarSeo(r);
-    renderSeo();
-    toast(`"${r.rotulo}" excluída da aba SEOs.`);
-  }
+function handleSeoClick(ev) {
+  if (ev.target.closest("input, select, a, label, button")) return;
+  const tr = ev.target.closest("tr[data-id]");
+  if (tr) openDrawer(tr.dataset.id);
 }
 
 // ---------------------------------------------------------------------------
-// Aba: Eventos
+// Aba: Sem site conosco (prospecção)
 // ---------------------------------------------------------------------------
 
-function renderEventoMetrics(list) {
-  const total = list.length;
-  const aAcontecer = list.filter((e) => e.status === "a_acontecer").length;
-  const acontecendo = list.filter((e) => e.status === "acontecendo").length;
-  const realizado = list.filter((e) => e.status === "realizado").length;
-  const comSite = list.filter((e) => e.endereco).length;
-  const wordpress = list.filter((e) => e.siteAtual === "wordpress").length;
-  const personalizado = list.filter((e) => e.siteAtual === "personalizado").length;
-  const hotsite = list.filter((e) => e.siteAtual === "hotsite").length;
+// quem já virou site sai do quadro — casa pela sigla
+function prospectosAtuais() {
+  const siglasComSite = new Set(ativos().map((s) => (s.nome || "").toUpperCase()));
+  return PROSPECTOS.filter((p) => !siglasComSite.has((p.sigla || "").toUpperCase()));
+}
 
-  document.getElementById("evento-metrics").innerHTML = metricsHtml([
-    { label: "Eventos", value: total, note: `${total - comSite} sem endereço cadastrado` },
-    { label: "Com site no ar", value: comSite, dot: "d-ok", note: `${pct(comSite, total)}% do recorte` },
-    { label: "Fora do WordPress", value: personalizado + hotsite, dot: "d-accent", note: `${pct(personalizado + hotsite, total)}% já migrado` },
-    { label: "Ainda por acontecer", value: aAcontecer + acontecendo, dot: "d-warn", note: "Janela aberta para migrar" },
+function renderProspectos() {
+  const st = STATE.prospectos;
+  const todos = prospectosAtuais();
+  const filtered = todos.filter((p) => (!st.q || `${p.sigla} ${p.nome || ""}`.toLowerCase().includes(st.q)) && (!st.saude || p.saude === st.saude));
+  const sorted = ordenar(filtered, st.sort);
+  VIEW.prospectos = sorted;
+
+  const mrr = sorted.reduce((a, p) => a + (p.mrr || 0), 0);
+  document.getElementById("prospectos-metrics").innerHTML = metricsHtml([
+    { label: "Sem site conosco", value: sorted.length, dot: "d-accent", note: `de ${todos.length} no quadro` },
+    { label: "MRR dessas associações", value: moeda(mrr), money: true, note: "O que já pagam à Softaliza" },
+    { label: "Saudáveis", value: sorted.filter((p) => p.saude === "saudavel").length, dot: "d-ok", note: "Melhor momento para oferecer" },
+    { label: "Com site próprio", value: sorted.filter((p) => p.siteAtual).length, dot: "d-off", note: "Têm site, só não é conosco" },
   ]);
 
-  document.getElementById("evento-composition").innerHTML =
-    compositionHtml("Status", [
-      { cls: "s-ok", label: "Acontecendo", count: acontecendo },
-      { cls: "s-warn", label: "A acontecer", count: aAcontecer },
-      { cls: "s-off", label: "Realizado", count: realizado },
-    ]) +
-    compositionHtml("Tipo de site", [
-      { cls: "s-off", label: "WordPress", count: wordpress },
-      { cls: "s-accent", label: "Personalizado", count: personalizado },
-      { cls: "s-ok", label: "Hotsite", count: hotsite },
-    ]);
-}
-
-function renderEventoTable(list) {
-  const tbody = document.getElementById("evento-table-body");
-  if (!list.length) {
-    tbody.innerHTML = emptyRow(6, "Nenhum evento", "Nenhum evento bate com esses filtros. Ajuste a busca, o ano ou o status.");
-    return;
-  }
-
-  tbody.innerHTML = list
-    .map((e) => {
-      const k = `data-id="${esc(e.id)}"`;
-      return `<tr>
-        <td class="ident-td" data-l="Evento">
-          <div class="ident">
-            ${avatar(e.sigla || e.nomeCurto || e.nome)}
-            <div class="ident-fields">
-              <input class="f f-strong e-curto" type="text" ${k} value="${esc(e.nomeCurto)}" placeholder="Nome curto" />
-              <input class="f f-sub e-nome" type="text" ${k} value="${esc(e.nome)}" placeholder="Nome completo" />
-            </div>
-          </div>
-        </td>
-        <td class="num" data-l="Ano"><input class="f f-num e-ano" type="text" inputmode="numeric" maxlength="4" ${k} value="${esc(e.ano)}" placeholder="${ANO_ATUAL}" /></td>
-        <td data-l="Status">${selectField("e-status", k, e.status, STATUS_OPTIONS)}</td>
-        <td data-l="Tipo de site">${selectField("e-tipo", k, e.siteAtual, SITE_ATUAL_OPTIONS)}</td>
-        <td data-l="Endereço">${linkCell("e-endereco", k, e.endereco)}</td>
-        <td class="actions" data-l="">
-          <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
-        </td>
-      </tr>`;
-    })
-    .join("");
-}
-
-function renderEvento() {
-  const s = STATE.evento;
-  const filtered = EVENTOS.filter((e) => {
-    if (e.removido) return false;
-    if (s.q && !`${e.nome} ${e.nomeCurto || ""} ${e.sigla || ""} ${e.ano || ""}`.toLowerCase().includes(s.q)) return false;
-    if (s.status && e.status !== s.status) return false;
-    if (s.site && e.siteAtual !== s.site) return false;
-    return true;
-  });
-
-  const sorted = sortList(filtered, s.sort, "evento");
-  VIEW.evento = sorted;
-
-  renderEventoMetrics(sorted);
-  renderEventoTable(sorted);
+  const tbody = document.getElementById("prospectos-table-body");
+  tbody.innerHTML = sorted.length
+    ? sorted
+        .map(
+          (p) => `<tr>
+        <td class="ident-td" data-l="Associação"><div class="ident">${avatar(p.sigla)}<div class="ident-fields"><span class="seo-nome">${esc(p.sigla)}</span><span class="f-sub" style="padding:0 1px">${esc(p.nome || "")}</span></div></div></td>
+        <td data-l="Saúde">${badge(SAUDE_META[p.saude])}</td>
+        <td class="num" data-l="MRR">${p.mrr != null ? moeda(p.mrr) : '<span class="muted">—</span>'}</td>
+        <td data-l="Site atual deles">${p.siteAtual ? `<a class="seo-url" href="${esc(withProto(p.siteAtual))}" target="_blank" rel="noopener noreferrer">${esc(displayLink(p.siteAtual))}</a>` : '<span class="muted">nenhum</span>'}</td>
+        <td class="actions" data-l=""><button class="btn-mini" type="button" data-sigla="${esc(p.sigla)}">${ICON.plus} Cadastrar site</button></td>
+      </tr>`
+        )
+        .join("")
+    : emptyRow(5, "Nada por aqui", "Nenhuma associação bate com esses filtros.");
   syncTableFit();
-
-  const totalAtivos = EVENTOS.filter((e) => !e.removido).length;
-  document.getElementById("evento-count").textContent =
-    sorted.length === totalAtivos ? `${totalAtivos} no total` : `${sorted.length} de ${totalAtivos}`;
+  document.getElementById("prospectos-count").textContent = sorted.length === todos.length ? `${todos.length} no total` : `${sorted.length} de ${todos.length}`;
   renderNavCounts();
 }
 
-function handleEventoEdit(ev) {
-  const el = ev.target;
-  const id = el.dataset.id;
-  if (!id) return;
-  const e = EVENTOS.find((x) => x.id === id);
-  if (!e) return;
-
-  if (el.classList.contains("e-status")) {
-    e.status = el.value;
-    renderEvento();
-  } else if (el.classList.contains("e-tipo")) {
-    e.siteAtual = el.value;
-    renderEvento();
-  } else if (el.classList.contains("e-endereco")) {
-    e.endereco = el.value;
-    refreshLinkButtons(el);
-  } else if (el.classList.contains("e-ano")) {
-    // campo vazio volta para o ano corrente, que é o padrão da coluna
-    const digits = el.value.replace(/[^\d]/g, "").slice(0, 4);
-    e.ano = digits ? Number(digits) : ANO_ATUAL;
-    renderEvento();
-  } else if (el.classList.contains("e-curto")) {
-    e.nomeCurto = el.value;
-  } else if (el.classList.contains("e-nome")) {
-    e.nome = el.value;
-  } else {
-    return;
-  }
-  salvarEvento(e);
-}
-
-async function handleEventoClick(ev) {
-  const btn = ev.target.closest("button[data-act]");
+function handleProspectosClick(ev) {
+  const btn = ev.target.closest("button[data-sigla]");
   if (!btn) return;
-  const e = EVENTOS.find((x) => x.id === btn.dataset.id);
-  if (!e) return;
-
-  if (btn.dataset.act === "open") return openLink(e.endereco);
-  if (btn.dataset.act === "copy") return copyLink(e.endereco);
-
-  if (btn.dataset.act === "del") {
-    const nome = e.nomeCurto || e.nome;
-    const ok = await confirmDialog("Excluir evento", `"${nome}" sai do painel de sites de eventos.`, "Excluir");
-    if (!ok) return;
-    e.removido = true;
-    salvarEvento(e);
-    renderEvento();
-    toast(`"${nome}" excluído.`);
-  }
+  const p = PROSPECTOS.find((x) => x.sigla === btn.dataset.sigla);
+  if (!p) return;
+  openAddDialog({ nome: p.sigla, nomeCompleto: p.nome || "", url: p.siteAtual || "", tipo: "associacao", plataforma: "wordpress" });
 }
 
 // ---------------------------------------------------------------------------
-// Aba: Remodelar (os sites conosco)
+// Painel de detalhe
 // ---------------------------------------------------------------------------
 
-function naAbaSites(a) {
-  return !a.removido && a.siteConosco;
+let DRAWER_ID = null;
+
+function openDrawer(id) {
+  const s = SITES.find((x) => x.id === id);
+  if (!s) return;
+  DRAWER_ID = id;
+  renderDrawer(s);
+  document.getElementById("drawer-backdrop").hidden = false;
+  const d = document.getElementById("drawer");
+  d.classList.add("open");
+  d.setAttribute("aria-hidden", "false");
 }
 
-function getSites() {
-  return ASSOCIACOES.filter(naAbaSites).sort((x, y) => (y.mrr || 0) - (x.mrr || 0));
+function closeDrawer() {
+  DRAWER_ID = null;
+  document.getElementById("drawer-backdrop").hidden = true;
+  const d = document.getElementById("drawer");
+  d.classList.remove("open");
+  d.setAttribute("aria-hidden", "true");
 }
 
-function rankBadge(rank) {
-  let cls = "";
-  if (rank <= 3) cls = " r-top";
-  else if (rank <= 10) cls = " r-mid";
-  return `<span class="rank${cls}">${rank}º</span>`;
+function campo(label, controle, full) {
+  return `<div class="dfield${full ? " full" : ""}"><label>${label}</label>${controle}</div>`;
 }
 
-function renderRemodelaMetrics(lista) {
-  const total = lista.length;
-  const feitas = lista.filter((a) => a.novaVersao === "feita").length;
-  const pendentes = lista.filter((a) => a.novaVersao === "pendente").length;
-  const nao = lista.filter((a) => a.novaVersao === "nao").length;
-  const wordpress = lista.filter((a) => a.siteAtual === "wordpress").length;
+function renderDrawer(s) {
+  const k = `data-id="${esc(s.id)}"`;
+  const seo = s.seo;
+  document.getElementById("drawer-ident").innerHTML = `${avatar(s.nome)}<div>
+    <div class="drawer-title">${esc(s.nome)}</div>
+    <div class="drawer-sub">${esc(s.nomeCompleto || displayLink(s.url) || "")}</div>
+    <div class="drawer-badges">${badge(SITUACAO_META[s.situacao])}${badge({ label: labelOf(PLATAFORMA_OPTIONS, s.plataforma), cls: "b-none" })}${s.saude ? badge(SAUDE_META[s.saude]) : ""}</div>
+  </div>`;
 
-  // "não" sai da conta: não é trabalho que ainda vá acontecer
-  const previstas = total - nao;
-  const mrr = lista.reduce((s, a) => s + (a.mrr || 0), 0);
-  const mrrPendente = lista.filter((a) => a.novaVersao === "pendente").reduce((s, a) => s + (a.mrr || 0), 0);
+  const auditoria = seo
+    ? `<div class="dgrid">
+        ${campo("Na busca", selectField(`nv-select enc-${seo.encontravel} d-enc`, k, seo.encontravel, ENCONTRAVEL_OPTIONS))}
+        ${campo("Indexação", `<div class="val">${badge(CONFORMIDADE_META[seo.conformidade])} <span class="muted">· ${seo.dominioSoftaliza ? "softaliza.com.br" : "domínio próprio"}</span></div>`)}
+        ${campo("Título da página", `<div class="val${seo.titulo ? "" : " muted"}">${esc(seo.titulo || "sem título")}</div>`, true)}
+        ${seo.urlFinal ? campo("Redireciona para", `<div class="val"><a class="seo-url" href="${esc(seo.urlFinal)}" target="_blank" rel="noopener noreferrer">${esc(displayLink(seo.urlFinal))}</a></div>`, true) : ""}
+        ${campo("Termo de pesquisa", `<input class="f d-pesq" type="text" ${k} value="${esc(seo.pesquisa)}" />`)}
+        ${campo("Conferido como indexado", `<div class="val">${switchField("d-idx", k, seo.indexado)}</div>`)}
+      </div>
+      ${seo.problemas.length || seo.lacunas.length ? `<div class="dlist" style="margin-top:10px">${seo.problemas.map((p) => `<span class="achado a-erro">${esc(p)}</span>`).join("")}${seo.lacunas.map((p) => `<span class="achado a-aviso">${esc(p)}</span>`).join("")}</div>` : ""}`
+    : `<div class="val muted">Este site ainda não passou pela varredura. Rode <code>tools-auditor-seo.js</code> para incluí-lo.</div>`;
 
-  document.getElementById("remodela-metrics").innerHTML = metricsHtml([
-    { label: "Sites conosco", value: total, dot: "d-accent", note: `${total - wordpress} já fora do WordPress` },
-    { label: "Novas versões prontas", value: feitas, dot: "d-ok", note: `${pct(feitas, previstas)}% do que está previsto` },
-    { label: "Pendentes", value: pendentes, dot: "d-warn", note: nao ? `${nao} marcada(s) como “Não”` : "Ainda no modelo antigo" },
-    { label: "MRR represado", value: moeda(mrrPendente), money: true, note: `de ${moeda(mrr)} no total` },
-  ]);
+  const ar = s.noAr == null ? "sem checagem" : s.noAr ? "no ar" : "fora do ar";
+  const rod = s.noAr === false || s.rodapeSoftaliza == null ? "sem checagem" : s.rodapeSoftaliza ? "credita a Softaliza" : "sem o crédito da Softaliza";
 
-  const prog = document.getElementById("remodela-progress");
-  prog.innerHTML = previstas
-    ? `<div class="progress-track"><div class="progress-fill" style="width:${pct(feitas, previstas)}%"></div></div>
-       <span>${feitas}/${previstas} concluídas</span>`
-    : "";
+  document.getElementById("drawer-body").innerHTML = `
+    <section class="dsec"><h3>Cadastro</h3>
+      <div class="dgrid">
+        ${campo("Nome ou sigla", `<input class="f d-nome" type="text" ${k} value="${esc(s.nome)}" />`)}
+        ${campo("Tipo", selectField("d-tipo", k, s.tipo, TIPO_OPTIONS))}
+        ${campo("Nome completo", `<input class="f d-nomec" type="text" ${k} value="${esc(s.nomeCompleto || "")}" />`, true)}
+        ${campo("Endereço", `<input class="f f-mono d-url" type="text" ${k} value="${esc(s.url)}" spellcheck="false" />`, true)}
+        ${campo("Plataforma", selectField("d-plat", k, s.plataforma, PLATAFORMA_OPTIONS))}
+        ${campo("Situação", selectField(`nv-select sit-${s.situacao} d-sit`, k, s.situacao, SITUACAO_OPTIONS))}
+        ${s.tipo === "evento" ? campo("Status do evento", selectField("d-stev", k, s.statusEvento || "a_acontecer", STATUS_EVENTO_OPTIONS)) : campo("MRR", `<input class="f f-num d-mrr" type="text" inputmode="decimal" ${k} value="${s.mrr != null ? s.mrr : ""}" />`)}
+        ${s.tipo === "evento" ? campo("Ano", `<input class="f f-num d-ano" type="text" inputmode="numeric" maxlength="4" ${k} value="${esc(s.ano)}" />`) : campo("Saúde no SoftaHub", `<div class="val">${s.saude ? badge(SAUDE_META[s.saude]) : '<span class="muted">sem dado</span>'}</div>`)}
+      </div>
+    </section>
+    <section class="dsec"><h3>Remodelação</h3>
+      <div class="dgrid">
+        ${campo("Nova versão", selectField(`nv-select nv-${s.novaVersao} d-nv`, k, s.novaVersao, NV_OPTIONS))}
+        ${campo("Endereço novo", `<input class="f f-mono d-novo" type="text" ${k} value="${esc(s.enderecoNovo)}" spellcheck="false" />`)}
+      </div>
+    </section>
+    <section class="dsec"><h3>Checagens${s.verificadoEm ? ` · ${s.verificadoEm}` : ""}</h3>
+      <div class="dgrid">
+        ${campo("Disponibilidade", `<div class="val">${ar}</div>`)}
+        ${campo("Rodapé", `<div class="val">${rod}</div>`)}
+      </div>
+    </section>
+    <section class="dsec"><h3>SEO</h3>${auditoria}</section>
+    <section class="dsec"><h3>Histórico</h3>
+      <div class="hist">${[...(s.historico || [])]
+        .reverse()
+        .map((h) => `<div class="hist-item"><time>${esc(h.em)}</time>${esc(h.texto)}</div>`)
+        .join("") || '<div class="val muted">Sem registros.</div>'}</div>
+      <form class="note-form" id="note-form" ${k}><input class="f" type="text" id="note-text" placeholder="Anotar algo neste site…" autocomplete="off" /><button class="btn btn-ghost" type="submit">Anotar</button></form>
+    </section>`;
 }
 
-function renderRemodelaTable(list) {
-  const tbody = document.getElementById("remodela-table-body");
-  if (!list.length) {
-    tbody.innerHTML = emptyRow(
-      9,
-      "Nenhum site aqui",
-      "Nenhum site bate com esses filtros. Marque a chave <strong>Site conosco</strong> na aba Sites, ou use “Adicionar à remodelação”."
-    );
-    return;
-  }
-
-  tbody.innerHTML = list
-    .map((a) => {
-      const k = `data-key="${esc(a.chave)}"`;
-      const cls = a.novaVersao === "feita" ? "done" : a.novaVersao === "nao" ? "skip" : "";
-      return `<tr class="${cls}">
-        <td data-l="Prioridade">${rankBadge(a._rank)}</td>
-        <td class="ident-td" data-l="Associação">
-          <div class="ident">
-            ${avatar(a.sigla)}
-            <div class="ident-fields">
-              <input class="f f-strong s-sigla" type="text" ${k} value="${esc(a.sigla)}" placeholder="Sigla" />
-              <input class="f f-sub s-nome" type="text" ${k} value="${esc(a.nome)}" placeholder="Nome completo" />
-            </div>
-          </div>
-        </td>
-        <td data-l="Saúde">${saudeBadge(a.saude)}</td>
-        <td class="num" data-l="MRR"><input class="f f-num s-mrr" type="text" inputmode="decimal" ${k} value="${a.mrr != null ? a.mrr : ""}" placeholder="0" /></td>
-        <td data-l="Site atual">
-          <div class="stack">
-            ${siteTipoBadge(a.siteAtual)}
-            ${selectField("s-tipo", k, a.siteAtual, SITE_ATUAL_OPTIONS)}
-          </div>
-        </td>
-        <td data-l="Endereço">${linkCell("s-endereco", k, a.endereco)}</td>
-        <td data-l="Nova versão">${selectField(`nv-select nv-${a.novaVersao} s-nv`, k, a.novaVersao, NOVA_VERSAO_OPTIONS)}</td>
-        <td data-l="Endereço novo">${linkCell("s-endereco-novo", k, a.enderecoNovo)}</td>
-        <td class="actions" data-l="">
-          <button class="mini danger" type="button" data-act="unqueue" ${k} title="Marcar que o site não é conosco" aria-label="Tirar da remodelação">${ICON.trash}</button>
-        </td>
-      </tr>`;
-    })
-    .join("");
-}
-
-function renderRemodela() {
-  const s = STATE.remodela;
-  const lista = getSites();
-  // cópia só para carregar o número da prioridade; as edições vão no original
-  const ranked = lista.map((a, i) => ({ ...a, _rank: i + 1 }));
-
-  // pendentes primeiro, feitas depois, "não" no fim
-  const ordered = [...ranked].sort((a, b) => NV_ORDER[a.novaVersao] - NV_ORDER[b.novaVersao]);
-
-  const filtered = ordered.filter((a) => {
-    if (s.q && !`${a.sigla || ""} ${a.nome || ""}`.toLowerCase().includes(s.q)) return false;
-    if (s.nv && a.novaVersao !== s.nv) return false;
-    if (s.origem && a.siteAtual !== s.origem) return false;
-    return true;
-  });
-
-  VIEW.remodela = filtered;
-
-  renderRemodelaMetrics(lista);
-  renderRemodelaTable(filtered);
-  syncTableFit();
-
-  document.getElementById("remodela-count").textContent =
-    filtered.length === lista.length ? `${lista.length} no total` : `${filtered.length} de ${lista.length}`;
-  renderNavCounts();
-}
-
-function handleRemodelaEdit(ev) {
+function handleDrawerEdit(ev) {
   const el = ev.target;
-  const chave = el.dataset.key;
-  if (!chave) return;
-  const a = ASSOCIACOES.find((x) => x.chave === chave);
-  if (!a) return;
-
-  if (el.classList.contains("s-nv")) {
-    a.novaVersao = el.value;
-    salvarAssoc(a);
-    renderRemodela();
-    const msg = {
-      feita: `Nova versão de "${a.sigla}" marcada como feita.`,
-      pendente: `"${a.sigla}" voltou para pendente.`,
-      nao: `"${a.sigla}" marcada como “Não” e foi para o fim da lista.`,
-    };
-    toast(msg[el.value], "info");
-    return;
-  }
-
-  if (el.classList.contains("s-endereco-novo")) {
-    a.enderecoNovo = el.value;
-    refreshLinkButtons(el);
-  } else if (el.classList.contains("s-endereco")) {
-    a.endereco = el.value;
-    refreshLinkButtons(el);
-    renderAssoc();
-  } else if (el.classList.contains("s-nome")) {
-    a.nome = el.value;
-    renderAssoc();
-  } else if (el.classList.contains("s-sigla")) {
-    a.sigla = el.value;
-    renderRemodela();
-    renderAssoc();
-  } else if (el.classList.contains("s-tipo")) {
-    a.siteAtual = el.value;
-    renderRemodela();
-    renderAssoc();
-  } else if (el.classList.contains("s-mrr")) {
-    const limpo = el.value.replace(/[^\d.,]/g, "").replace(",", ".");
-    const n = parseFloat(limpo);
-    a.mrr = Number.isFinite(n) ? n : null;
-    renderRemodela();
-    renderAssoc();
-  } else {
-    return;
-  }
-  salvarAssoc(a);
+  const s = siteDe(el);
+  if (!s) return;
+  const c = el.classList;
+  if (c.contains("d-nome")) s.nome = el.value;
+  else if (c.contains("d-nomec")) s.nomeCompleto = el.value || null;
+  else if (c.contains("d-url")) {
+    registrar(s, `Endereço: ${s.url || "(vazio)"} → ${el.value || "(vazio)"}.`);
+    s.url = el.value;
+  } else if (c.contains("d-tipo")) s.tipo = el.value;
+  else if (c.contains("d-plat")) {
+    registrar(s, `Plataforma: ${labelOf(PLATAFORMA_OPTIONS, s.plataforma)} → ${labelOf(PLATAFORMA_OPTIONS, el.value)}.`);
+    s.plataforma = el.value;
+  } else if (c.contains("d-sit")) {
+    registrar(s, `Situação: ${SITUACAO_META[s.situacao].label} → ${SITUACAO_META[el.value].label}.`);
+    s.situacao = el.value;
+  } else if (c.contains("d-stev")) s.statusEvento = el.value;
+  else if (c.contains("d-mrr")) {
+    const n = parseFloat(el.value.replace(/[^\d.,]/g, "").replace(",", "."));
+    s.mrr = Number.isFinite(n) ? n : null;
+  } else if (c.contains("d-ano")) {
+    const d = el.value.replace(/[^\d]/g, "").slice(0, 4);
+    s.ano = d ? Number(d) : ANO_ATUAL;
+  } else if (c.contains("d-nv")) {
+    registrar(s, `Nova versão: ${labelOf(NV_OPTIONS, s.novaVersao)} → ${labelOf(NV_OPTIONS, el.value)}.`);
+    s.novaVersao = el.value;
+    if (el.value === "feita" && s.situacao === "remodelar") {
+      s.situacao = "pronto";
+      registrar(s, "Situação: Remodelar → Pronto, pela nova versão feita.");
+    }
+  } else if (c.contains("d-novo")) {
+    registrar(s, `Endereço novo: ${el.value || "(vazio)"}.`);
+    s.enderecoNovo = el.value;
+  } else if (c.contains("d-enc") && s.seo) {
+    registrar(s, `Na busca: ${ENCONTRAVEL_META[s.seo.encontravel].label} → ${ENCONTRAVEL_META[el.value].label} (manual).`);
+    s.seo.encontravel = el.value;
+    s.seo.encontravelManual = true;
+  } else if (c.contains("d-pesq") && s.seo) s.seo.pesquisa = el.value;
+  else if (c.contains("d-idx") && s.seo) {
+    s.seo.indexado = el.checked;
+    registrar(s, el.checked ? "Conferido como indexado na busca." : "Desmarcado como indexado.");
+  } else return;
+  salvarSite(s);
+  renderDrawer(s);
+  renderTudo();
 }
 
-async function handleRemodelaClick(ev) {
-  const btn = ev.target.closest("button[data-act]");
-  if (!btn) return;
-  const a = ASSOCIACOES.find((x) => x.chave === btn.dataset.key);
-  if (!a) return;
-
-  if (btn.dataset.act === "open" || btn.dataset.act === "copy") {
-    const input = btn.parentElement.querySelector("input");
-    const valor = input ? input.value : "";
-    return btn.dataset.act === "open" ? openLink(valor) : copyLink(valor);
-  }
-
-  if (btn.dataset.act === "unqueue") {
-    const ok = await confirmDialog(
-      "Tirar da remodelação",
-      `"${a.sigla}" deixa de ser marcada como site conosco e sai desta aba. A associação continua na aba Sites.`,
-      "Tirar da lista"
-    );
-    if (!ok) return;
-    a.siteConosco = false;
-    salvarAssoc(a);
-    renderRemodela();
-    renderAssoc();
-    toast(`"${a.sigla}" saiu da remodelação.`);
-  }
+function handleNote(ev) {
+  ev.preventDefault();
+  const s = SITES.find((x) => x.id === DRAWER_ID);
+  const input = document.getElementById("note-text");
+  if (!s || !input || !input.value.trim()) return;
+  registrar(s, input.value.trim());
+  salvarSite(s);
+  renderDrawer(s);
+  toast("Anotado.");
 }
 
 // ---------------------------------------------------------------------------
@@ -1593,8 +1329,7 @@ function refreshLinkButtons(input) {
 
 function openLink(link) {
   const url = withProto(link);
-  if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
+  if (url) window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function copyLink(link) {
@@ -1605,9 +1340,7 @@ function copyLink(link) {
       () => toast(`Copiado: ${displayLink(url)}`, "info"),
       () => toast("Não consegui copiar o endereço.", "warn")
     );
-  } else {
-    toast("Cópia não suportada neste navegador.", "warn");
-  }
+  } else toast("Cópia não suportada neste navegador.", "warn");
 }
 
 // ---------------------------------------------------------------------------
@@ -1633,78 +1366,23 @@ function exportCsv() {
   let head;
   let rows;
   let name;
+  const sim = (v) => (v == null ? "" : v ? "sim" : "não");
 
-  if (STATE.tab === "assoc") {
-    name = "associacoes.csv";
-    name = "sites.csv";
-    head = ["Sigla", "Nome", "Saúde", "MRR", "Site atual", "Endereço"];
-    rows = VIEW.assoc.map((a) => [
-      a.sigla,
-      a.nome || "",
-      (SAUDE_META[a.saude] || {}).label || "",
-      a.mrr != null ? a.mrr : "",
-      labelOf(SITE_ATUAL_OPTIONS, a.siteAtual),
-      a.endereco || "",
-    ]);
-  } else if (STATE.tab === "seo") {
-    name = "seo.csv";
-    head = ["Site", "Sigla", "Tipo", "Status do evento", "Endereço", "Na busca", "Indexado", "Indexação", "Domínio", "Pesquisa", "O que falta"];
-    rows = VIEW.seo.map((r) => [
-      r.rotulo,
-      r.sigla || "",
-      r.tipo,
-      r.statusEvento || "",
-      r.url,
-      (ENCONTRAVEL_META[r.encontravel] || {}).label || r.encontravel,
-      r.indexado ? "sim" : "não",
-      (CONFORMIDADE_META[r.conformidade] || {}).label || "",
-      r.dominioSoftaliza ? "softaliza" : "próprio",
-      r.pesquisa || "",
-      (r.encontravel === "nao" ? r.problemas : r.lacunas).join(" | "),
-    ]);
-  } else if (STATE.tab === "carteira") {
-    name = "associacoes.csv";
-    head = ["Sigla", "Nome", "Saúde", "MRR", "Endereço", "Site conosco"];
-    rows = VIEW.carteira.map((a) => [
-      a.sigla,
-      a.nome || "",
-      (SAUDE_META[a.saude] || {}).label || "",
-      a.mrr != null ? a.mrr : "",
-      a.endereco || "",
-      a.siteConosco ? "sim" : "não",
-    ]);
-  } else if (STATE.tab === "evento") {
-    name = "eventos.csv";
-    head = ["Nome curto", "Nome", "Sigla", "Ano", "Status", "Tipo de site", "Endereço"];
-    rows = VIEW.evento.map((e) => [
-      e.nomeCurto || "",
-      e.nome || "",
-      e.sigla || "",
-      e.ano != null ? e.ano : "",
-      labelOf(STATUS_OPTIONS, e.status),
-      labelOf(SITE_ATUAL_OPTIONS, e.siteAtual),
-      e.endereco || "",
-    ]);
+  if (STATE.tab === "prospectos") {
+    name = "sem-site-conosco.csv";
+    head = ["Sigla", "Nome", "Saúde", "MRR", "Site atual deles"];
+    rows = VIEW.prospectos.map((p) => [p.sigla, p.nome || "", (SAUDE_META[p.saude] || {}).label || "", p.mrr ?? "", p.siteAtual || ""]);
   } else {
-    name = "sites.csv";
-    head = ["Prioridade", "Sigla", "Nome", "MRR", "Site atual", "Endereço", "Nova versão", "Endereço novo"];
-    rows = VIEW.remodela.map((a) => [
-      a._rank,
-      a.sigla,
-      a.nome || "",
-      a.mrr != null ? a.mrr : "",
-      labelOf(SITE_ATUAL_OPTIONS, a.siteAtual),
-      a.endereco || "",
-      labelOf(NOVA_VERSAO_OPTIONS, a.novaVersao),
-      a.enderecoNovo || "",
+    const lista = STATE.tab === "remodelar" ? VIEW.remodelar : STATE.tab === "seo" ? VIEW.seo : VIEW.sites;
+    name = `${STATE.tab}.csv`;
+    head = ["Site", "Nome completo", "Tipo", "Status do evento", "Ano", "Endereço", "Plataforma", "Situação", "Nova versão", "Endereço novo", "MRR", "Saúde", "No ar", "Rodapé Softaliza", "Na busca", "Indexação", "Indexado", "Pesquisa", "Verificado em"];
+    rows = lista.map((s) => [
+      s.nome, s.nomeCompleto || "", s.tipo, s.statusEvento || "", s.ano ?? "", s.url, labelOf(PLATAFORMA_OPTIONS, s.plataforma), SITUACAO_META[s.situacao].label,
+      labelOf(NV_OPTIONS, s.novaVersao), s.enderecoNovo || "", s.mrr ?? "", (SAUDE_META[s.saude] || {}).label || "", sim(s.noAr), sim(s.rodapeSoftaliza),
+      s.seo ? ENCONTRAVEL_META[s.seo.encontravel].label : "", s.seo ? CONFORMIDADE_META[s.seo.conformidade].label : "", s.seo ? sim(s.seo.indexado) : "", s.seo ? s.seo.pesquisa : "", s.verificadoEm || "",
     ]);
   }
-
-  if (!rows.length) {
-    toast("Não há linhas para exportar nessa visão.", "warn");
-    return;
-  }
-
+  if (!rows.length) return toast("Não há linhas para exportar nessa visão.", "warn");
   download(name, [head, ...rows].map((r) => r.map(csvCell).join(";")).join("\r\n"));
   toast(`${rows.length} linha(s) exportadas.`);
 }
@@ -1714,11 +1392,17 @@ function exportCsv() {
 // ---------------------------------------------------------------------------
 
 function renderNavCounts() {
-  document.getElementById("count-assoc").textContent = ASSOCIACOES.filter((a) => !a.removido && a.siteConosco).length;
-  document.getElementById("count-evento").textContent = EVENTOS.filter((e) => !e.removido).length;
-  document.getElementById("count-remodela").textContent = getSites().length;
-  document.getElementById("count-carteira").textContent = ASSOCIACOES.filter((a) => !a.removido).length;
-  document.getElementById("count-seo").textContent = SEO.filter((r) => !r.removido).length;
+  document.getElementById("count-sites").textContent = ativos().length;
+  document.getElementById("count-remodelar").textContent = fila().filter((s) => s.novaVersao !== "feita").length;
+  document.getElementById("count-seo").textContent = ativos().filter((s) => s.noAr === false || (s.noAr && s.rodapeSoftaliza === false) || (s.seo && s.seo.encontravel === "nao")).length;
+  document.getElementById("count-prospectos").textContent = prospectosAtuais().length;
+}
+
+const RENDER = { sites: renderSites, remodelar: renderRemodelar, seo: renderSeo, prospectos: renderProspectos };
+
+function renderTudo() {
+  RENDER[STATE.tab]();
+  renderNavCounts();
 }
 
 function setTab(tab) {
@@ -1726,50 +1410,34 @@ function setTab(tab) {
   try {
     localStorage.setItem(TAB_KEY, tab);
   } catch (e) {}
-
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
   document.getElementById(`panel-${tab}`).classList.add("active");
-
   document.getElementById("page-title").textContent = PAGES[tab].title;
   document.getElementById("page-sub").textContent = PAGES[tab].sub;
   document.getElementById("btn-add-text").textContent = PAGES[tab].add;
-  document.getElementById("btn-add").title = PAGES[tab].add;
-
-  if (tab === "assoc") renderAssoc();
-  else if (tab === "evento") renderEvento();
-  else if (tab === "carteira") renderCarteira();
-  else if (tab === "seo") renderSeo();
-  else renderRemodela();
-
-  // medir o encaixe só faz sentido com o painel já visível
+  RENDER[tab]();
   syncTableFit();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function currentTheme() {
-  return (
-    document.documentElement.dataset.theme ||
-    (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-  );
+  return document.documentElement.dataset.theme || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 }
 
 function toggleTheme() {
   const next = currentTheme() === "dark" ? "light" : "dark";
   const root = document.documentElement;
-
   root.classList.add("theme-switching");
   root.dataset.theme = next;
   requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
-
   try {
     localStorage.setItem(THEME_KEY, next);
   } catch (e) {}
   toast(next === "dark" ? "Tema escuro" : "Tema claro", "info");
 }
 
-// Só liberamos o overflow (e com ele o thead sticky) na tabela que realmente
-// cabe na largura disponível; se não coubesse, a página rolaria na horizontal.
+// só libera o overflow (e o thead sticky) na tabela que cabe na largura
 function syncTableFit() {
   document.querySelectorAll(".panel.active .table-scroll").forEach((box) => {
     const table = box.querySelector("table");
@@ -1779,15 +1447,10 @@ function syncTableFit() {
   });
 }
 
-// o thead gruda exatamente sob a barra do topo, seja qual for a altura dela
 function syncTopbarHeight() {
   const topbar = document.querySelector(".topbar");
-  const apply = () =>
-    document.documentElement.style.setProperty("--topbar-h", `${Math.round(topbar.getBoundingClientRect().height)}px`);
-
+  const apply = () => document.documentElement.style.setProperty("--topbar-h", `${Math.round(topbar.getBoundingClientRect().height)}px`);
   apply();
-  // o observer cobre mudanças de altura sem resize (o subtítulo some no
-  // celular); o listener cobre o resto, sem depender só dele
   if (window.ResizeObserver) new ResizeObserver(apply).observe(topbar);
   window.addEventListener("resize", apply);
   window.addEventListener("resize", syncTableFit);
@@ -1812,7 +1475,7 @@ function initSort(panelId, stateKey, rerender) {
       if (sort.col === col) sort.dir = sort.dir === "asc" ? "desc" : "asc";
       else {
         sort.col = col;
-        sort.dir = col === "mrr" || col === "ano" ? "desc" : "asc";
+        sort.dir = col === "mrr" ? "desc" : "asc";
       }
       panel.querySelectorAll("th.sortable").forEach((o) => o.classList.remove("sort-asc", "sort-desc"));
       th.classList.add(sort.dir === "asc" ? "sort-asc" : "sort-desc");
@@ -1823,34 +1486,17 @@ function initSort(panelId, stateKey, rerender) {
   if (first) first.classList.add(STATE[stateKey].sort.dir === "asc" ? "sort-asc" : "sort-desc");
 }
 
-function initDialogs() {
-  document.querySelectorAll("dialog.modal").forEach((dlg) => {
-    dlg.querySelectorAll("[data-close]").forEach((btn) => btn.addEventListener("click", () => dlg.close()));
-    dlg.addEventListener("click", (ev) => {
-      if (ev.target === dlg) dlg.close();
-    });
-  });
-
-  document.getElementById("btn-add").addEventListener("click", openAddDialog);
-  document.getElementById("dlg-add-submit").addEventListener("click", submitAddDialog);
-  document.getElementById("dlg-add-body").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    submitAddDialog();
-  });
-}
-
 function initShortcuts() {
   document.addEventListener("keydown", (ev) => {
     const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(ev.target.tagName);
-
     if (ev.key === "/" && !typing && !ev.metaKey && !ev.ctrlKey) {
       ev.preventDefault();
       const input = document.querySelector(`#panel-${STATE.tab} .search input`);
       if (input) input.focus();
       return;
     }
-
     if (ev.key === "Escape") {
+      if (DRAWER_ID) return closeDrawer();
       const input = document.querySelector(`#panel-${STATE.tab} .search input`);
       if (input && document.activeElement === input && input.value) {
         ev.preventDefault();
@@ -1865,182 +1511,75 @@ function initShortcuts() {
 // Boot
 // ---------------------------------------------------------------------------
 
-async function carregarModelo() {
-  const remoto = await carregarDoBanco();
-  const chaveA = (a) => a.chave;
-  const chaveE = (e) => e.id;
-  const chaveS = (r) => r.seoId;
-
-  // basta qualquer uma das listas ter conteúdo para o banco mandar
-  if (remoto && (remoto.associacoes.length || (remoto.eventos || []).length || (remoto.seo || []).length)) {
-    // o banco manda, mas o que entrou na base depois dele precisa ser somado
-    const a = completarComBase(remoto.associacoes, semearAssociacoes(), chaveA);
-    const e = completarComBase(remoto.eventos, semearEventos(), chaveE);
-    const seo = mesclarSeoComBase(remoto.seo || [], semearSeo());
-    ASSOCIACOES = a.lista;
-    EVENTOS = e.lista;
-    SEO = normalizarSeo(seo.lista);
-    gravarCache();
-
-    if (a.novos.length || e.novos.length || seo.novos.length || seo.atualizados) {
-      marcarSincronia("Salvo no banco", "s-ok");
-      // varredura nova precisa subir inteira, não só as linhas inéditas
-      await enviarNovos(a.novos, e.novos, seo.atualizados ? SEO : seo.novos);
-    } else {
-      marcarSincronia("Salvo no banco", "s-ok");
-    }
-    return;
-  }
-
-  // banco vazio ou indisponível: parte do espelho local, também completado
-  const cacheA = lerCache(CACHE_ASSOC);
-  const cacheE = lerCache(CACHE_EVENTO);
-  const cacheS = lerCache(CACHE_SEO);
-  ASSOCIACOES = cacheA ? completarComBase(cacheA, semearAssociacoes(), chaveA).lista : semearAssociacoes();
-  EVENTOS = cacheE ? completarComBase(cacheE, semearEventos(), chaveE).lista : semearEventos();
-  SEO = normalizarSeo(cacheS ? mesclarSeoComBase(cacheS, semearSeo()).lista : semearSeo());
-  gravarCache();
-
-  if (BANCO.ativo) await semearBanco();
-  else marcarSincronia("Só neste navegador", "s-off");
-}
-
-// grava no banco os registros novos vindos da base
-async function enviarNovos(associacoes, eventos, seo) {
-  if (!BANCO.ativo || (!associacoes.length && !eventos.length && !(seo || []).length)) return;
-  try {
-    await fetch(API, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ associacoes, eventos, seo: seo || [] }),
-    });
-  } catch (e) {
-    marcarSincronia("Falha ao salvar", "s-erro");
-  }
-}
-
 async function init() {
   await carregarModelo();
 
-  document.querySelectorAll(".nav-item").forEach((btn) => {
-    btn.addEventListener("click", () => setTab(btn.dataset.tab));
-  });
-
+  document.querySelectorAll(".nav-item").forEach((btn) => btn.addEventListener("click", () => setTab(btn.dataset.tab)));
   document.getElementById("btn-theme").addEventListener("click", toggleTheme);
   document.getElementById("btn-export").addEventListener("click", exportCsv);
-
-  document.getElementById("assoc-search").addEventListener("input", (e) => {
-    STATE.assoc.q = e.target.value.trim().toLowerCase();
-    renderAssoc();
+  document.getElementById("btn-add").addEventListener("click", () => openAddDialog());
+  document.getElementById("dlg-add-submit").addEventListener("click", submitAddDialog);
+  document.getElementById("dlg-add-body").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    submitAddDialog();
   });
-  document.getElementById("evento-search").addEventListener("input", (e) => {
-    STATE.evento.q = e.target.value.trim().toLowerCase();
-    renderEvento();
-  });
-  document.getElementById("remodela-search").addEventListener("input", (e) => {
-    STATE.remodela.q = e.target.value.trim().toLowerCase();
-    renderRemodela();
-  });
-
-  initChips("assoc-chips-health", (v) => {
-    STATE.assoc.saude = v;
-    renderAssoc();
-  });
-  initChips("assoc-chips-site", (v) => {
-    STATE.assoc.site = v;
-    renderAssoc();
-  });
-  initChips("evento-chips-status", (v) => {
-    STATE.evento.status = v;
-    renderEvento();
-  });
-  initChips("evento-chips-site", (v) => {
-    STATE.evento.site = v;
-    renderEvento();
-  });
-  initChips("remodela-chips-nv", (v) => {
-    STATE.remodela.nv = v;
-    renderRemodela();
-  });
-  initChips("remodela-chips-origem", (v) => {
-    STATE.remodela.origem = v;
-    renderRemodela();
+  document.querySelectorAll("dialog.modal").forEach((dlg) => {
+    dlg.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => dlg.close()));
+    dlg.addEventListener("click", (ev) => {
+      if (ev.target === dlg) dlg.close();
+    });
   });
 
-  document.getElementById("carteira-search").addEventListener("input", (e) => {
-    STATE.carteira.q = e.target.value.trim().toLowerCase();
-    renderCarteira();
-  });
-  initChips("carteira-chips-conosco", (v) => {
-    STATE.carteira.conosco = v;
-    renderCarteira();
-  });
-  initChips("carteira-chips-saude", (v) => {
-    STATE.carteira.saude = v;
-    renderCarteira();
-  });
+  const busca = (id, key, render) =>
+    document.getElementById(id).addEventListener("input", (e) => {
+      STATE[key].q = e.target.value.trim().toLowerCase();
+      render();
+    });
+  busca("sites-search", "sites", renderSites);
+  busca("remodelar-search", "remodelar", renderRemodelar);
+  busca("seo-search", "seo", renderSeo);
+  busca("prospectos-search", "prospectos", renderProspectos);
 
-  const carteiraBody = document.getElementById("carteira-table-body");
-  carteiraBody.addEventListener("change", handleCarteiraEdit);
-  carteiraBody.addEventListener("click", handleCarteiraClick);
+  initChips("sites-chips-tipo", (v) => ((STATE.sites.tipo = v), renderSites()));
+  initChips("sites-chips-situacao", (v) => ((STATE.sites.situacao = v), renderSites()));
+  initChips("sites-chips-saude", (v) => ((STATE.sites.saude = v), renderSites()));
+  initChips("remodelar-chips-tipo", (v) => ((STATE.remodelar.tipo = v), renderRemodelar()));
+  initChips("remodelar-chips-nv", (v) => ((STATE.remodelar.nv = v), renderRemodelar()));
+  initChips("seo-chips-veredito", (v) => ((STATE.seo.veredito = v), renderSeo()));
+  initChips("seo-chips-conformidade", (v) => ((STATE.seo.conformidade = v), renderSeo()));
+  initChips("seo-chips-evento", (v) => ((STATE.seo.evento = v), renderSeo()));
+  initChips("prospectos-chips-saude", (v) => ((STATE.prospectos.saude = v), renderProspectos()));
 
-  document.getElementById("seo-search").addEventListener("input", (e) => {
-    STATE.seo.q = e.target.value.trim().toLowerCase();
-    renderSeo();
-  });
-  initChips("seo-chips-veredito", (v) => {
-    STATE.seo.veredito = v;
-    renderSeo();
-  });
-  initChips("seo-chips-tipo", (v) => {
-    STATE.seo.tipo = v;
-    renderSeo();
-  });
-  initChips("seo-chips-status", (v) => {
-    STATE.seo.statusEvento = v;
-    renderSeo();
-  });
-  const seoBody = document.getElementById("seo-table-body");
-  seoBody.addEventListener("change", handleSeoEdit);
-  seoBody.addEventListener("click", handleSeoClick);
-
-  initChips("seo-chips-conformidade", (v) => {
-    STATE.seo.conformidade = v;
-    renderSeo();
-  });
+  initSort("panel-sites", "sites", renderSites);
   initSort("panel-seo", "seo", renderSeo);
+  initSort("panel-prospectos", "prospectos", renderProspectos);
 
-  initSort("panel-carteira", "carteira", renderCarteira);
-  initSort("panel-assoc", "assoc", renderAssoc);
-  initSort("panel-evento", "evento", renderEvento);
+  const liga = (id, change, click) => {
+    const el = document.getElementById(id);
+    if (change) el.addEventListener("change", change);
+    if (click) el.addEventListener("click", click);
+  };
+  liga("sites-table-body", handleSitesEdit, handleSitesClick);
+  liga("remodelar-table-body", handleRemodelarEdit, handleRemodelarClick);
+  liga("seo-table-body", handleSeoEdit, handleSeoClick);
+  liga("prospectos-table-body", null, handleProspectosClick);
 
-  const assocBody = document.getElementById("assoc-table-body");
-  assocBody.addEventListener("change", handleAssocEdit);
-  assocBody.addEventListener("click", handleAssocClick);
+  const drawer = document.getElementById("drawer");
+  drawer.addEventListener("change", handleDrawerEdit);
+  drawer.addEventListener("submit", (ev) => {
+    if (ev.target.id === "note-form") handleNote(ev);
+  });
+  document.getElementById("drawer-close").addEventListener("click", closeDrawer);
+  document.getElementById("drawer-backdrop").addEventListener("click", closeDrawer);
 
-  const eventoBody = document.getElementById("evento-table-body");
-  eventoBody.addEventListener("change", handleEventoEdit);
-  eventoBody.addEventListener("click", handleEventoClick);
-
-  const remodelaBody = document.getElementById("remodela-table-body");
-  remodelaBody.addEventListener("change", handleRemodelaEdit);
-  remodelaBody.addEventListener("click", handleRemodelaClick);
-
-  initDialogs();
   initShortcuts();
   syncTopbarHeight();
-
-  renderAssoc();
-  renderEvento();
-  renderRemodela();
-  renderCarteira();
-  renderSeo();
 
   let saved = null;
   try {
     saved = localStorage.getItem(TAB_KEY);
   } catch (e) {}
-  setTab(PAGES[saved] ? saved : "assoc");
+  setTab(PAGES[saved] ? saved : "sites");
 }
 
 document.addEventListener("DOMContentLoaded", init);

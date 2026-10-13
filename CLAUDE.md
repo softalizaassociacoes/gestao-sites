@@ -30,17 +30,30 @@ build nem framework. Hospedado no Vercel.
 
 ## Dados
 
+O modelo é centrado em **site**: um registro por site da Softaliza, de
+associação ou de evento, na tabela `gestao_sites_sites`. O SoftaHub não entra
+no modelo — só alimenta o quadro de oportunidades (`PROSPECTOS_BASE`), que é
+estático e só leitura.
+
 O Supabase é a verdade; o `localStorage` é espelho, para o painel abrir
 offline. `data.js` completa o que ainda não existe no banco, casando por
-chave.
+`id`, e a varredura mais nova atualiza os campos medidos (SEO, rodapé, no ar)
+sem tocar no que é do usuário: situação, nova versão, marcações e histórico.
 
-Ao acrescentar um campo a um registro de SEO, prefira guardá-lo dentro do
-JSON `dados` da tabela `gestao_sites_seo` — assim o banco não precisa de
-coluna nova. É onde já moram `pesquisa`, `removido` e `manual`.
+Na tabela, só `id`, `tipo`, `nome`, `url`, `plataforma`, `situacao` e
+`removido` são colunas. Todo o resto do registro vai no jsonb `dados` —
+campo novo não pede coluna nova.
+
+As tabelas antigas (`gestao_sites_associacoes`, `gestao_sites_eventos`,
+`gestao_sites_seo`) são lidas uma única vez, quando a de sites está vazia,
+para migrar o que já havia sido editado. Depois disso podem ser apagadas.
 
 Registros carregados de um deploy anterior podem não ter os campos mais
-recentes: normalize na carga, com um padrão sensato, em vez de assumir que
+recentes: `normalizarSite` dá padrão a tudo na carga, em vez de assumir que
 existem.
+
+Toda mudança relevante num site (situação, plataforma, endereço, nova versão)
+entra no `historico` do registro, com data e texto.
 
 ## Idioma
 
