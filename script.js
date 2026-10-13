@@ -339,12 +339,13 @@ const STATE = {
   tab: "painel",
   painel: {},
   sites: { q: "", tipo: "", situacao: "", saude: "", versao: "", sort: { col: "nome", dir: "asc" } },
+  eventos: { q: "", status: "", plataforma: "", sort: { col: "ano", dir: "desc" } },
   remodelar: { q: "", tipo: "", nv: "" },
   seo: { q: "", veredito: "", conformidade: "", evento: "", sort: { col: "seo", dir: "asc" } },
   prospectos: { q: "", saude: "", sort: { col: "mrr", dir: "desc" } },
 };
 
-const VIEW = { sites: [], remodelar: [], seo: [], prospectos: [] };
+const VIEW = { sites: [], eventos: [], remodelar: [], seo: [], prospectos: [] };
 
 const PAGES = {
   painel: {
@@ -355,6 +356,11 @@ const PAGES = {
   sites: {
     title: "Todos os sites",
     sub: "Cada site da Softaliza, de associação ou de evento, com situação, saúde e histórico.",
+    add: "Novo site",
+  },
+  eventos: {
+    title: "Eventos",
+    sub: "Os sites de congressos e eventos, com ano e status de cada um.",
     add: "Novo site",
   },
   remodelar: {
@@ -747,6 +753,13 @@ function ordenar(list, sort) {
     } else if (col === "saude") {
       x = SAUDE_ORDER[a.saude] ?? 9;
       y = SAUDE_ORDER[b.saude] ?? 9;
+    } else if (col === "statusEvento") {
+      const ORD = { acontecendo: 0, a_acontecer: 1, realizado: 2 };
+      x = ORD[a.statusEvento] ?? 9;
+      y = ORD[b.statusEvento] ?? 9;
+    } else if (col === "ano") {
+      x = a.ano == null ? -1 : a.ano;
+      y = b.ano == null ? -1 : b.ano;
     } else if (col === "situacao") {
       x = SITUACAO_ORDER[a.situacao] ?? 9;
       y = SITUACAO_ORDER[b.situacao] ?? 9;
@@ -846,7 +859,7 @@ function renderPainel() {
 
   document.getElementById("painel-recortes").innerHTML = [
     { valor: assoc.length, rotulo: "Sites de associações", sub: `${assoc.filter(versaoInicial).length} em versão inicial`, ir: ["sites", { tipo: "associacao", saude: "", situacao: "", versao: "", q: "" }] },
-    { valor: eventos.length, rotulo: "Sites de eventos", sub: `${eventos.filter(versaoInicial).length} em versão inicial`, ir: ["sites", { tipo: "evento", saude: "", situacao: "", versao: "", q: "" }] },
+    { valor: eventos.length, rotulo: "Sites de eventos", sub: `${eventos.filter(versaoInicial).length} em versão inicial`, ir: ["eventos", { status: "", plataforma: "", q: "" }] },
     { valor: inicial.length, rotulo: "Em versão inicial", sub: "Não migrados para domínio próprio", tom: "aviso", ir: ["sites", { versao: "inicial", tipo: "", saude: "", situacao: "", q: "" }] },
     { valor: definitivo.length, rotulo: "Link definitivo", sub: "Cliente escolheu ficar no softaliza", tom: "accent", ir: ["sites", { versao: "definitivo", tipo: "", saude: "", situacao: "", q: "" }] },
     { valor: lista.filter((s) => s.situacao === "remodelar").length, rotulo: "Para remodelar", sub: "Na fila, ordenada por MRR", tom: "aviso", ir: ["remodelar", { tipo: "", nv: "", q: "" }] },
@@ -1022,6 +1035,144 @@ async function excluirSite(s) {
   closeDrawer();
   renderTudo();
   toast(`"${s.nome}" excluído.`);
+}
+
+// ---------------------------------------------------------------------------
+// Aba: Eventos
+//
+// O mesmo registro de site, numa visão só dos eventos — com ano e status, que
+// é o que distingue um site de evento dos demais.
+// ---------------------------------------------------------------------------
+
+const eventos = () => ativos().filter((s) => s.tipo === "evento");
+
+function renderEventosMetrics(list) {
+  const total = list.length;
+  const aAcontecer = list.filter((s) => s.statusEvento === "a_acontecer").length;
+  const acontecendo = list.filter((s) => s.statusEvento === "acontecendo").length;
+  const realizado = list.filter((s) => s.statusEvento === "realizado").length;
+  const noAr = list.filter((s) => checagem(s, "ar").valor).length;
+  const inicial = list.filter(versaoInicial).length;
+
+  document.getElementById("eventos-metrics").innerHTML = metricsHtml([
+    { label: "Sites de eventos", value: total, note: `${new Set(list.map((s) => s.ano).filter(Boolean)).size} anos diferentes` },
+    { label: "Ativos", value: aAcontecer + acontecendo, dot: "d-warn", note: `${acontecendo} acontecendo agora` },
+    { label: "No ar", value: noAr, dot: "d-ok", note: `${total - noAr} fora do ar ou sem checagem` },
+    { label: "Em versão inicial", value: inicial, dot: "d-accent", note: "Ainda em softaliza.com.br" },
+  ]);
+
+  const porAno = {};
+  list.forEach((s) => {
+    const a = s.ano || "sem ano";
+    porAno[a] = (porAno[a] || 0) + 1;
+  });
+  const cores = ["s-ok", "s-accent", "s-warn", "s-off", "s-risk"];
+
+  document.getElementById("eventos-composition").innerHTML =
+    compositionHtml("Status", [
+      { cls: "s-ok", label: "Acontecendo", count: acontecendo },
+      { cls: "s-warn", label: "A acontecer", count: aAcontecer },
+      { cls: "s-off", label: "Realizado", count: realizado },
+    ]) +
+    compositionHtml(
+      "Por ano",
+      Object.keys(porAno)
+        .sort()
+        .map((a, i) => ({ cls: cores[i % cores.length], label: String(a), count: porAno[a] }))
+    );
+}
+
+function renderEventosTable(list) {
+  const tbody = document.getElementById("eventos-table-body");
+  if (!list.length) {
+    tbody.innerHTML = emptyRow(7, "Nenhum evento", "Nenhum site de evento bate com esses filtros.");
+    return;
+  }
+  tbody.innerHTML = list
+    .map((s) => {
+      const k = `data-id="${esc(s.id)}"`;
+      return `<tr class="abre" ${k}>
+        <td class="ident-td" data-l="Evento">${identCell(s)}</td>
+        <td class="num" data-l="Ano"><input class="f f-num e-ano" type="text" inputmode="numeric" maxlength="4" ${k} value="${esc(s.ano)}" placeholder="${ANO_ATUAL}" /></td>
+        <td data-l="Status">${selectField("e-status", k, s.statusEvento || "a_acontecer", STATUS_EVENTO_OPTIONS)}</td>
+        <td data-l="Plataforma">${selectField("e-plataforma", k, s.plataforma, PLATAFORMA_OPTIONS)}</td>
+        <td data-l="Endereço">${linkCell("e-url", k, s.url)}</td>
+        <td data-l="Checagens">${checksHtml(s, k)}</td>
+        <td class="actions" data-l="">
+          <button class="mini" type="button" data-act="detail" ${k} title="Detalhes e histórico" aria-label="Detalhes">${ICON.detail}</button>
+          <button class="mini danger" type="button" data-act="del" ${k} title="Excluir" aria-label="Excluir">${ICON.trash}</button>
+        </td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderEventos() {
+  const st = STATE.eventos;
+  const todos = eventos();
+  const filtered = todos.filter((s) => {
+    if (!buscaBate(s, st.q) && !String(s.ano || "").includes(st.q)) return false;
+    if (st.status && s.statusEvento !== st.status) return false;
+    if (st.plataforma && s.plataforma !== st.plataforma) return false;
+    return true;
+  });
+  const sorted = ordenar(filtered, st.sort);
+  VIEW.eventos = sorted;
+  renderEventosMetrics(sorted);
+  renderEventosTable(sorted);
+  syncTableFit();
+  document.getElementById("eventos-count").textContent = sorted.length === todos.length ? `${todos.length} no total` : `${sorted.length} de ${todos.length}`;
+  renderNavCounts();
+}
+
+function handleEventosEdit(ev) {
+  const el = ev.target;
+  const s = siteDe(el);
+  if (!s) return;
+  if (el.classList.contains("e-ano")) {
+    const d = el.value.replace(/[^\d]/g, "").slice(0, 4);
+    s.ano = d ? Number(d) : ANO_ATUAL;
+  } else if (el.classList.contains("e-status")) {
+    registrar(s, `Status do evento: ${STATUS_EVENTO_LABEL[s.statusEvento] || "—"} → ${STATUS_EVENTO_LABEL[el.value]}.`);
+    s.statusEvento = el.value;
+  } else if (el.classList.contains("e-plataforma")) {
+    registrar(s, `Plataforma: ${labelOf(PLATAFORMA_OPTIONS, s.plataforma)} → ${labelOf(PLATAFORMA_OPTIONS, el.value)}.`);
+    s.plataforma = el.value;
+  } else if (el.classList.contains("e-url")) {
+    registrar(s, `Endereço: ${s.url || "(vazio)"} → ${el.value || "(vazio)"}.`);
+    s.url = el.value;
+    salvarSite(s);
+    refreshLinkButtons(el);
+    return;
+  } else return;
+  salvarSite(s);
+  renderTudo();
+}
+
+async function handleEventosClick(ev) {
+  const chk = ev.target.closest("button[data-check]");
+  if (chk) {
+    const s = siteDe(chk);
+    if (!s) return;
+    ciclarChecagem(s, chk.dataset.check);
+    salvarSite(s);
+    renderTudo();
+    if (DRAWER_ID === s.id) renderDrawer(s);
+    return;
+  }
+  const btn = ev.target.closest("button[data-act]");
+  if (btn) {
+    const s = siteDe(btn);
+    if (!s) return;
+    if (btn.dataset.act === "open") return openLink(s.url);
+    if (btn.dataset.act === "copy") return copyLink(s.url);
+    if (btn.dataset.act === "detail") return openDrawer(s.id);
+    if (btn.dataset.act === "del") return excluirSite(s);
+    return;
+  }
+  if (ev.target.closest("input, select, a, label, button")) return;
+  const tr = ev.target.closest("tr[data-id]");
+  if (tr) openDrawer(tr.dataset.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1537,7 +1688,7 @@ function exportCsv() {
     head = ["Sigla", "Nome", "Saúde", "MRR", "Site atual deles"];
     rows = VIEW.prospectos.map((p) => [p.sigla, p.nome || "", (SAUDE_META[p.saude] || {}).label || "", p.mrr ?? "", p.siteAtual || ""]);
   } else {
-    const lista = STATE.tab === "remodelar" ? VIEW.remodelar : STATE.tab === "seo" ? VIEW.seo : VIEW.sites;
+    const lista = VIEW[STATE.tab] || VIEW.sites;
     name = `${STATE.tab}.csv`;
     head = ["Site", "Nome completo", "Tipo", "Status do evento", "Ano", "Endereço", "Plataforma", "Situação", "Nova versão", "Endereço novo", "MRR", "Saúde", "No ar", "Rodapé Softaliza", "Na busca", "Indexação", "Indexado", "Pesquisa", "Verificado em"];
     rows = lista.map((s) => [
@@ -1557,12 +1708,13 @@ function exportCsv() {
 
 function renderNavCounts() {
   document.getElementById("count-sites").textContent = ativos().length;
+  document.getElementById("count-eventos").textContent = eventos().length;
   document.getElementById("count-remodelar").textContent = fila().filter((s) => s.novaVersao !== "feita").length;
   document.getElementById("count-seo").textContent = ativos().filter((s) => s.noAr === false || (s.noAr && s.rodapeSoftaliza === false) || (s.seo && s.seo.encontravel === "nao")).length;
   document.getElementById("count-prospectos").textContent = prospectosAtuais().length;
 }
 
-const RENDER = { painel: renderPainel, sites: renderSites, remodelar: renderRemodelar, seo: renderSeo, prospectos: renderProspectos };
+const RENDER = { painel: renderPainel, sites: renderSites, eventos: renderEventos, remodelar: renderRemodelar, seo: renderSeo, prospectos: renderProspectos };
 
 function renderTudo() {
   RENDER[STATE.tab]();
@@ -1700,6 +1852,7 @@ async function init() {
       render();
     });
   busca("sites-search", "sites", renderSites);
+  busca("eventos-search", "eventos", renderEventos);
   busca("remodelar-search", "remodelar", renderRemodelar);
   busca("seo-search", "seo", renderSeo);
   busca("prospectos-search", "prospectos", renderProspectos);
@@ -1708,6 +1861,8 @@ async function init() {
   initChips("sites-chips-situacao", (v) => ((STATE.sites.situacao = v), renderSites()));
   initChips("sites-chips-saude", (v) => ((STATE.sites.saude = v), renderSites()));
   initChips("sites-chips-versao", (v) => ((STATE.sites.versao = v), renderSites()));
+  initChips("eventos-chips-status", (v) => ((STATE.eventos.status = v), renderEventos()));
+  initChips("eventos-chips-plataforma", (v) => ((STATE.eventos.plataforma = v), renderEventos()));
   initChips("remodelar-chips-tipo", (v) => ((STATE.remodelar.tipo = v), renderRemodelar()));
   initChips("remodelar-chips-nv", (v) => ((STATE.remodelar.nv = v), renderRemodelar()));
   initChips("seo-chips-veredito", (v) => ((STATE.seo.veredito = v), renderSeo()));
@@ -1716,6 +1871,7 @@ async function init() {
   initChips("prospectos-chips-saude", (v) => ((STATE.prospectos.saude = v), renderProspectos()));
 
   initSort("panel-sites", "sites", renderSites);
+  initSort("panel-eventos", "eventos", renderEventos);
   initSort("panel-seo", "seo", renderSeo);
   initSort("panel-prospectos", "prospectos", renderProspectos);
 
@@ -1727,6 +1883,7 @@ async function init() {
   liga("painel-alertas", null, handlePainelClick);
   liga("painel-recortes", null, handlePainelClick);
   liga("sites-table-body", handleSitesEdit, handleSitesClick);
+  liga("eventos-table-body", handleEventosEdit, handleEventosClick);
   liga("remodelar-table-body", handleRemodelarEdit, handleRemodelarClick);
   liga("seo-table-body", handleSeoEdit, handleSeoClick);
   liga("prospectos-table-body", null, handleProspectosClick);

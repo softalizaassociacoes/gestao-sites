@@ -45,6 +45,11 @@
           <span class="nav-text">Todos os sites</span>
           <span class="nav-count" id="count-sites">0</span>
         </button>
+        <button class="nav-item" data-tab="eventos" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
+          <span class="nav-text">Eventos</span>
+          <span class="nav-count" id="count-eventos">0</span>
+        </button>
         <button class="nav-item" data-tab="remodelar" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.9 2.9M16.2 16.2l2.9 2.9M2 12h4M18 12h4M4.9 19.1l2.9-2.9M16.2 7.8l2.9-2.9"/></svg>
           <span class="nav-text">Remodelar</span>
@@ -164,6 +169,55 @@
                   </tr>
                 </thead>
                 <tbody id="sites-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================================================== eventos -->
+        <section id="panel-eventos" class="panel">
+          <div class="metrics" id="eventos-metrics"></div>
+          <div class="comp-grid" id="eventos-composition"></div>
+
+          <div class="filters">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="eventos-search" placeholder="Buscar por nome, ano ou endereço…" autocomplete="off" />
+              <kbd>/</kbd>
+            </div>
+            <div class="chips" id="eventos-chips-status" role="group" aria-label="Filtrar por status">
+              <button class="chip on" data-value="" type="button">Todo status</button>
+              <button class="chip" data-value="a_acontecer" type="button"><span class="chip-dot d-warn"></span>A acontecer</button>
+              <button class="chip" data-value="acontecendo" type="button"><span class="chip-dot d-ok"></span>Acontecendo</button>
+              <button class="chip" data-value="realizado" type="button"><span class="chip-dot d-off"></span>Realizado</button>
+            </div>
+            <div class="chips" id="eventos-chips-plataforma" role="group" aria-label="Filtrar por plataforma">
+              <button class="chip on" data-value="" type="button">Toda plataforma</button>
+              <button class="chip" data-value="wordpress" type="button">WordPress</button>
+              <button class="chip" data-value="personalizado" type="button">Personalizado</button>
+              <button class="chip" data-value="hotsite" type="button">Hotsite</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Sites de eventos</h2>
+              <span class="count" id="eventos-count"></span>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="sortable" data-sort="nome">Evento <span class="arrow"></span></th>
+                    <th class="sortable num" data-sort="ano">Ano <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="statusEvento">Status <span class="arrow"></span></th>
+                    <th class="sortable" data-sort="plataforma">Plataforma <span class="arrow"></span></th>
+                    <th>Endereço</th>
+                    <th>Checagens</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="eventos-table-body"></tbody>
               </table>
             </div>
           </div>
