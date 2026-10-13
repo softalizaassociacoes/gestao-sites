@@ -30,9 +30,17 @@
         </div>
       </div>
 
+      <div class="rail-label">Visão geral</div>
+      <nav class="rail-nav">
+        <button class="nav-item active" data-tab="painel" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          <span class="nav-text">Dashboard</span>
+        </button>
+      </nav>
+
       <div class="rail-label">Sites</div>
       <nav class="rail-nav">
-        <button class="nav-item active" data-tab="sites" type="button">
+        <button class="nav-item" data-tab="sites" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>
           <span class="nav-text">Todos os sites</span>
           <span class="nav-count" id="count-sites">0</span>
@@ -90,8 +98,18 @@
       </header>
 
       <div class="content">
+        <!-- ================================================= dashboard -->
+        <section id="panel-painel" class="panel active">
+          <div class="metrics" id="painel-metrics"></div>
+          <div class="comp-grid" id="painel-composition"></div>
+          <h2 class="secao-titulo">Precisa de atenção</h2>
+          <div class="cartoes" id="painel-alertas"></div>
+          <h2 class="secao-titulo">Carteira de sites</h2>
+          <div class="cartoes" id="painel-recortes"></div>
+        </section>
+
         <!-- ===================================================== sites -->
-        <section id="panel-sites" class="panel active">
+        <section id="panel-sites" class="panel">
           <div class="metrics" id="sites-metrics"></div>
           <div class="comp-grid" id="sites-composition"></div>
 
@@ -118,6 +136,12 @@
               <button class="chip" data-value="fora-do-ar" type="button"><span class="chip-dot d-risk"></span>Fora do ar</button>
               <button class="chip" data-value="sem-rodape" type="button"><span class="chip-dot d-warn"></span>Sem rodapé</button>
               <button class="chip" data-value="sem-seo" type="button"><span class="chip-dot d-risk"></span>Sem SEO</button>
+            </div>
+            <div class="chips" id="sites-chips-versao" role="group" aria-label="Filtrar por versão">
+              <button class="chip on" data-value="" type="button">Toda versão</button>
+              <button class="chip" data-value="inicial" type="button"><span class="chip-dot d-warn"></span>Versão inicial</button>
+              <button class="chip" data-value="definitivo" type="button"><span class="chip-dot d-accent"></span>Link definitivo</button>
+              <button class="chip" data-value="proprio" type="button"><span class="chip-dot d-ok"></span>Domínio próprio</button>
             </div>
           </div>
 

@@ -1507,3 +1507,75 @@ tbody tr.abre .mini { cursor: pointer; }
   .dgrid { grid-template-columns: 1fr; }
   .checks { flex-wrap: wrap; }
 }
+
+/* ----------------------------------------------------------- dashboard */
+
+.secao-titulo {
+  margin: 26px 0 12px;
+  font-size: 13px;
+  font-weight: 680;
+  letter-spacing: -0.012em;
+  color: var(--text);
+}
+.secao-titulo:first-of-type { margin-top: 20px; }
+
+.cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(188px, 1fr));
+  gap: 12px;
+}
+
+.cartao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 15px 16px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+.cartao:hover { box-shadow: var(--sh-2); transform: translateY(-1px); border-color: var(--line-2); }
+.cartao:focus-visible { box-shadow: var(--ring); }
+.cartao.t-risco { border-left-color: var(--risk); }
+.cartao.t-aviso { border-left-color: var(--warn); }
+.cartao.t-ok { border-left-color: var(--ok); }
+.cartao.t-accent { border-left-color: var(--accent); }
+
+.cartao-num {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.cartao-rot { font-size: 12.5px; font-weight: 620; color: var(--text); }
+.cartao-sub { font-size: 11.5px; color: var(--text-3); line-height: 1.4; }
+
+/* checagens viraram botão: marcação à mão ganha ponto */
+button.check { font-family: inherit; cursor: pointer; }
+button.check:hover { filter: brightness(1.06); }
+button.check:focus-visible { box-shadow: var(--ring); }
+.check.c-man { font-weight: 800; }
+.check.c-man::after {
+  content: ;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  margin-left: 1px;
+}
+
+.dica { margin-top: 8px; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
+
+@media (max-width: 760px) {
+  .cartoes { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 9px; }
+  .cartao-num { font-size: 22px; }
+  /* alvo de toque decente para marcar checagem no celular */
+  button.check { height: 32px; padding: 0 11px; font-size: 11.5px; }
+}

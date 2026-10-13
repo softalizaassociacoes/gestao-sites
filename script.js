@@ -66,6 +66,14 @@ function normalizarSite(s) {
     rodapeSoftaliza: s.rodapeSoftaliza == null ? null : !!s.rodapeSoftaliza,
     noAr: s.noAr == null ? null : !!s.noAr,
     verificadoEm: s.verificadoEm || null,
+    // decisão do cliente de ficar com o endereço softaliza como definitivo
+    linkDefinitivo: !!s.linkDefinitivo,
+    // marcações manuais por cima da varredura; null = vale o automático
+    checagemManual: {
+      ar: s.checagemManual && s.checagemManual.ar != null ? !!s.checagemManual.ar : null,
+      rodape: s.checagemManual && s.checagemManual.rodape != null ? !!s.checagemManual.rodape : null,
+      seo: s.checagemManual && s.checagemManual.seo != null ? !!s.checagemManual.seo : null,
+    },
     historico: Array.isArray(s.historico) ? s.historico : [],
     manual: !!s.manual,
     removido: !!s.removido,
@@ -328,8 +336,9 @@ function registrar(site, texto) {
 // ---------------------------------------------------------------------------
 
 const STATE = {
-  tab: "sites",
-  sites: { q: "", tipo: "", situacao: "", saude: "", sort: { col: "nome", dir: "asc" } },
+  tab: "painel",
+  painel: {},
+  sites: { q: "", tipo: "", situacao: "", saude: "", versao: "", sort: { col: "nome", dir: "asc" } },
   remodelar: { q: "", tipo: "", nv: "" },
   seo: { q: "", veredito: "", conformidade: "", evento: "", sort: { col: "seo", dir: "asc" } },
   prospectos: { q: "", saude: "", sort: { col: "mrr", dir: "desc" } },
@@ -338,6 +347,11 @@ const STATE = {
 const VIEW = { sites: [], remodelar: [], seo: [], prospectos: [] };
 
 const PAGES = {
+  painel: {
+    title: "Dashboard",
+    sub: "A carteira de sites num relance: o que está no ar, o que falta migrar e o que precisa de atenção.",
+    add: "Novo site",
+  },
   sites: {
     title: "Todos os sites",
     sub: "Cada site da Softaliza, de associação ou de evento, com situação, saúde e histórico.",
@@ -550,28 +564,56 @@ function compositionHtml(title, segs) {
 const pct = (part, total) => (total ? Math.round((part / total) * 100) : 0);
 const moeda = (v) => currency.format(Math.round(v || 0));
 
-// as três checagens de um site, em pílulas curtas
-function checksHtml(s) {
-  const ar = s.noAr == null ? ["c-unk", "Ar ?"] : s.noAr ? ["c-ok", "No ar"] : ["c-bad", "Fora do ar"];
-  const rod =
-    s.noAr === false || s.rodapeSoftaliza == null
-      ? ["c-unk", "Rodapé ?"]
-      : s.rodapeSoftaliza
-        ? ["c-ok", "Rodapé"]
-        : ["c-warn", "Sem rodapé"];
-  const seo = !s.seo
-    ? ["c-unk", "SEO ?"]
-    : s.seo.encontravel === "nao"
-      ? ["c-bad", "Sem SEO"]
-      : s.seo.encontravel === "fraco"
-        ? ["c-warn", "SEO fraco"]
-        : ["c-ok", "SEO ok"];
-  const quando = s.verificadoEm ? ` · verificado em ${s.verificadoEm}` : "";
-  return `<div class="checks" title="${esc(`${ar[1]} · ${rod[1]} · ${seo[1]}${quando}`)}">
-    <span class="check ${ar[0]}"><i></i>${ar[1]}</span>
-    <span class="check ${rod[0]}"><i></i>${rod[1]}</span>
-    <span class="check ${seo[0]}"><i></i>${seo[1]}</span>
-  </div>`;
+function estagioMeta(s) {
+  if (!emSoftaliza(s)) return { label: "Domínio próprio", cls: "b-ok" };
+  return s.linkDefinitivo ? { label: "Link definitivo", cls: "b-accent" } : { label: "Versão inicial", cls: "b-warn" };
+}
+
+// Endereço em softaliza.com.br é a versão inicial: o site ainda não foi migrado
+// para domínio próprio. A exceção é o cliente ter escolhido ficar com o link —
+// aí o endereço continua softaliza, mas a migração está encerrada.
+const ehSoftaliza = (u) => /(^|\/\/|\.)softaliza\.com\.br/i.test(u || "");
+const emSoftaliza = (s) => ehSoftaliza(s.url) || ehSoftaliza(s.seo && s.seo.urlFinal);
+const versaoInicial = (s) => emSoftaliza(s) && !s.linkDefinitivo;
+
+// cada checagem vale o que foi marcado à mão; na ausência, o que a varredura viu
+function checagem(s, qual) {
+  const manual = s.checagemManual && s.checagemManual[qual];
+  if (manual != null) return { valor: manual, manual: true };
+  if (qual === "ar") return { valor: s.noAr, manual: false };
+  if (qual === "rodape") return { valor: s.noAr === false ? null : s.rodapeSoftaliza, manual: false };
+  return { valor: s.seo ? s.seo.encontravel !== "nao" && s.seo.encontravel !== "fraco" : null, manual: false };
+}
+
+// As três checagens, clicáveis: cada clique cicla automático → sim → não.
+// Marcado à mão ganha ponto, para distinguir do que veio da varredura.
+const CHECK_ROTULO = {
+  ar: { sim: "No ar", nao: "Fora do ar", vazio: "Ar ?" },
+  rodape: { sim: "Rodapé", nao: "Sem rodapé", vazio: "Rodapé ?" },
+  seo: { sim: "SEO ok", nao: "SEO ruim", vazio: "SEO ?" },
+};
+
+function checkHtml(s, qual, k) {
+  const { valor, manual } = checagem(s, qual);
+  const r = CHECK_ROTULO[qual];
+  const cls = valor == null ? "c-unk" : valor ? "c-ok" : qual === "rodape" ? "c-warn" : "c-bad";
+  const texto = valor == null ? r.vazio : valor ? r.sim : r.nao;
+  const origem = manual ? "marcado à mão" : s.verificadoEm ? `da varredura de ${s.verificadoEm}` : "sem checagem";
+  return `<button type="button" class="check ${cls}${manual ? " c-man" : ""}" data-check="${qual}" ${k}
+    title="${esc(`${texto} · ${origem} · clique para alternar`)}"><i></i>${texto}</button>`;
+}
+
+function checksHtml(s, k) {
+  return `<div class="checks">${checkHtml(s, "ar", k)}${checkHtml(s, "rodape", k)}${checkHtml(s, "seo", k)}</div>`;
+}
+
+// automático → sim → não → automático
+function ciclarChecagem(s, qual) {
+  const atual = s.checagemManual[qual];
+  const proximo = atual == null ? true : atual === true ? false : null;
+  s.checagemManual[qual] = proximo;
+  const nome = { ar: "Disponibilidade", rodape: "Rodapé", seo: "SEO" }[qual];
+  registrar(s, proximo == null ? `${nome}: voltou a seguir a varredura.` : `${nome}: marcado à mão como ${proximo ? "ok" : "problema"}.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -728,6 +770,103 @@ const ativos = () => SITES.filter((s) => !s.removido);
 const buscaBate = (s, q) => !q || `${s.nome} ${s.nomeCompleto || ""} ${s.url}`.toLowerCase().includes(q);
 
 // ---------------------------------------------------------------------------
+// Dashboard
+//
+// Cada recorte é um cartão que leva para a aba correspondente já filtrada —
+// o número é sempre clicável, nunca um beco sem saída.
+// ---------------------------------------------------------------------------
+
+// leva para uma aba com os filtros já postos
+function irPara(tab, filtros) {
+  Object.assign(STATE[tab], filtros);
+  setTab(tab);
+  // reflete nos chips para a tela não mentir sobre o que está filtrando
+  document.querySelectorAll(`#panel-${tab} .chips`).forEach((box) => {
+    const chips = [...box.querySelectorAll(".chip")];
+    const alvo = chips.find((c) => Object.values(filtros).includes(c.dataset.value) && c.dataset.value !== "");
+    const vazio = chips.find((c) => c.dataset.value === "");
+    const escolhido = alvo || vazio;
+    chips.forEach((c) => c.classList.toggle("on", c === escolhido));
+  });
+}
+
+function cartao(c) {
+  return `<button type="button" class="cartao${c.tom ? ` t-${c.tom}` : ""}" data-ir="${esc(JSON.stringify(c.ir))}">
+    <span class="cartao-num">${c.valor}</span>
+    <span class="cartao-rot">${c.rotulo}</span>
+    <span class="cartao-sub">${c.sub}</span>
+  </button>`;
+}
+
+function renderPainel() {
+  const lista = ativos();
+  const total = lista.length;
+  const assoc = lista.filter((s) => s.tipo === "associacao");
+  const eventos = lista.filter((s) => s.tipo === "evento");
+  const inicial = lista.filter(versaoInicial);
+  const definitivo = lista.filter((s) => emSoftaliza(s) && s.linkDefinitivo);
+  const proprio = lista.filter((s) => !emSoftaliza(s));
+
+  const foraDoAr = lista.filter((s) => checagem(s, "ar").valor === false);
+  const semRodape = lista.filter((s) => checagem(s, "ar").valor !== false && checagem(s, "rodape").valor === false);
+  const semSeo = lista.filter((s) => checagem(s, "seo").valor === false);
+  const comProblema = lista.filter(
+    (s) => checagem(s, "ar").valor === false || checagem(s, "rodape").valor === false || checagem(s, "seo").valor === false
+  );
+  const indexacaoFora = lista.filter((s) => s.seo && (s.seo.conformidade === "fechar" || s.seo.conformidade === "abrir"));
+
+  document.getElementById("painel-metrics").innerHTML = metricsHtml([
+    { label: "Sites no total", value: total, note: `${assoc.length} de associações · ${eventos.length} de eventos` },
+    { label: "Com algum problema", value: comProblema.length, dot: "d-risk", note: `${pct(comProblema.length, total)}% da carteira` },
+    { label: "Em versão inicial", value: inicial.length, dot: "d-warn", note: "Ainda em softaliza.com.br" },
+    { label: "Já migrados", value: proprio.length, dot: "d-ok", note: `${definitivo.length} ficaram com o link por escolha` },
+  ]);
+
+  document.getElementById("painel-composition").innerHTML =
+    compositionHtml("Estágio da migração", [
+      { cls: "s-ok", label: "Domínio próprio", count: proprio.length },
+      { cls: "s-accent", label: "Link definitivo", count: definitivo.length },
+      { cls: "s-warn", label: "Versão inicial", count: inicial.length },
+    ]) +
+    compositionHtml("Situação", [
+      { cls: "s-ok", label: "Pronto", count: lista.filter((s) => s.situacao === "pronto").length },
+      { cls: "s-warn", label: "Remodelar", count: lista.filter((s) => s.situacao === "remodelar").length },
+      { cls: "s-accent", label: "Em construção", count: lista.filter((s) => s.situacao === "construcao").length },
+      { cls: "s-off", label: "Desativado", count: lista.filter((s) => s.situacao === "desativado").length },
+    ]);
+
+  document.getElementById("painel-alertas").innerHTML = [
+    { valor: foraDoAr.length, rotulo: "Fora do ar", sub: "Não responderam na última checagem", tom: "risco", ir: ["sites", { saude: "fora-do-ar", tipo: "", situacao: "", versao: "", q: "" }] },
+    { valor: semSeo.length, rotulo: "Sem SEO", sub: "Não aparecem na busca pela sigla", tom: "risco", ir: ["sites", { saude: "sem-seo", tipo: "", situacao: "", versao: "", q: "" }] },
+    { valor: semRodape.length, rotulo: "Sem rodapé Softaliza", sub: "No ar, mas sem o crédito", tom: "aviso", ir: ["sites", { saude: "sem-rodape", tipo: "", situacao: "", versao: "", q: "" }] },
+    { valor: indexacaoFora.length, rotulo: "Indexação fora da regra", sub: "A fechar ou a liberar", tom: "aviso", ir: ["seo", { conformidade: "", veredito: "", evento: "", q: "" }] },
+  ]
+    .map(cartao)
+    .join("");
+
+  document.getElementById("painel-recortes").innerHTML = [
+    { valor: assoc.length, rotulo: "Sites de associações", sub: `${assoc.filter(versaoInicial).length} em versão inicial`, ir: ["sites", { tipo: "associacao", saude: "", situacao: "", versao: "", q: "" }] },
+    { valor: eventos.length, rotulo: "Sites de eventos", sub: `${eventos.filter(versaoInicial).length} em versão inicial`, ir: ["sites", { tipo: "evento", saude: "", situacao: "", versao: "", q: "" }] },
+    { valor: inicial.length, rotulo: "Em versão inicial", sub: "Não migrados para domínio próprio", tom: "aviso", ir: ["sites", { versao: "inicial", tipo: "", saude: "", situacao: "", q: "" }] },
+    { valor: definitivo.length, rotulo: "Link definitivo", sub: "Cliente escolheu ficar no softaliza", tom: "accent", ir: ["sites", { versao: "definitivo", tipo: "", saude: "", situacao: "", q: "" }] },
+    { valor: lista.filter((s) => s.situacao === "remodelar").length, rotulo: "Para remodelar", sub: "Na fila, ordenada por MRR", tom: "aviso", ir: ["remodelar", { tipo: "", nv: "", q: "" }] },
+    { valor: lista.filter((s) => s.situacao === "pronto").length, rotulo: "Prontos", sub: "Sem pendência de remodelação", tom: "ok", ir: ["sites", { situacao: "pronto", tipo: "", saude: "", versao: "", q: "" }] },
+    { valor: prospectosAtuais().length, rotulo: "Sem site conosco", sub: "Associações que poderiam ter", ir: ["prospectos", { saude: "", q: "" }] },
+  ]
+    .map(cartao)
+    .join("");
+
+  renderNavCounts();
+}
+
+function handlePainelClick(ev) {
+  const b = ev.target.closest("button[data-ir]");
+  if (!b) return;
+  const [tab, filtros] = JSON.parse(b.dataset.ir);
+  irPara(tab, filtros);
+}
+
+// ---------------------------------------------------------------------------
 // Aba: Sites
 // ---------------------------------------------------------------------------
 
@@ -786,7 +925,7 @@ function renderSitesTable(list) {
         <td data-l="Plataforma">${selectField("s-plataforma", k, s.plataforma, PLATAFORMA_OPTIONS)}</td>
         <td data-l="Situação">${selectField(`nv-select sit-${s.situacao} s-situacao`, k, s.situacao, SITUACAO_OPTIONS)}</td>
         <td data-l="Endereço">${linkCell("s-url", k, s.url)}</td>
-        <td data-l="Checagens">${checksHtml(s)}</td>
+        <td data-l="Checagens">${checksHtml(s, k)}</td>
         <td class="num" data-l="MRR">${s.mrr != null ? moeda(s.mrr) : '<span class="muted">—</span>'}</td>
         <td class="actions" data-l="">
           <button class="mini" type="button" data-act="detail" ${k} title="Detalhes e histórico" aria-label="Detalhes">${ICON.detail}</button>
@@ -803,9 +942,12 @@ function renderSites() {
     if (!buscaBate(s, st.q)) return false;
     if (st.tipo && s.tipo !== st.tipo) return false;
     if (st.situacao && s.situacao !== st.situacao) return false;
-    if (st.saude === "fora-do-ar" && s.noAr !== false) return false;
-    if (st.saude === "sem-rodape" && !(s.noAr && s.rodapeSoftaliza === false)) return false;
-    if (st.saude === "sem-seo" && !(s.seo && s.seo.encontravel === "nao")) return false;
+    if (st.saude === "fora-do-ar" && checagem(s, "ar").valor !== false) return false;
+    if (st.saude === "sem-rodape" && !(checagem(s, "ar").valor !== false && checagem(s, "rodape").valor === false)) return false;
+    if (st.saude === "sem-seo" && checagem(s, "seo").valor !== false) return false;
+    if (st.versao === "inicial" && !versaoInicial(s)) return false;
+    if (st.versao === "definitivo" && !(emSoftaliza(s) && s.linkDefinitivo)) return false;
+    if (st.versao === "proprio" && emSoftaliza(s)) return false;
     return true;
   });
   const sorted = ordenar(filtered, st.sort);
@@ -845,6 +987,16 @@ function handleSitesEdit(ev) {
 }
 
 async function handleSitesClick(ev) {
+  const chk = ev.target.closest("button[data-check]");
+  if (chk) {
+    const s = siteDe(chk);
+    if (!s) return;
+    ciclarChecagem(s, chk.dataset.check);
+    salvarSite(s);
+    renderTudo();
+    if (DRAWER_ID === s.id) renderDrawer(s);
+    return;
+  }
   const btn = ev.target.closest("button[data-act]");
   if (btn) {
     const s = siteDe(btn);
@@ -856,7 +1008,7 @@ async function handleSitesClick(ev) {
     return;
   }
   // clique na linha, fora de campo, abre o detalhe
-  if (ev.target.closest("input, select, a, label")) return;
+  if (ev.target.closest("input, select, a, label, button")) return;
   const tr = ev.target.closest("tr[data-id]");
   if (tr) openDrawer(tr.dataset.id);
 }
@@ -1235,14 +1387,23 @@ function renderDrawer(s) {
         ${s.tipo === "evento" ? campo("Ano", `<input class="f f-num d-ano" type="text" inputmode="numeric" maxlength="4" ${k} value="${esc(s.ano)}" />`) : campo("Saúde no SoftaHub", `<div class="val">${s.saude ? badge(SAUDE_META[s.saude]) : '<span class="muted">sem dado</span>'}</div>`)}
       </div>
     </section>
-    <section class="dsec"><h3>Remodelação</h3>
-      <div class="dgrid">
+    <section class="dsec"><h3>Migração</h3>
+      <div class="val" style="margin-bottom:10px">${badge(estagioMeta(s))}${emSoftaliza(s) ? "" : ' <span class="muted">· já em domínio próprio</span>'}</div>
+      ${
+        emSoftaliza(s)
+          ? `<label class="switch" style="margin-bottom:4px"><input type="checkbox" class="d-linkdef" ${k} ${s.linkDefinitivo ? "checked" : ""} /><span class="track"></span><span class="switch-label">O cliente escolheu ficar com este link</span></label>
+             <div class="dica">Marcado, o site sai da conta de “versão inicial” mas continua no endereço softaliza.</div>`
+          : ""
+      }
+      <div class="dgrid" style="margin-top:12px">
         ${campo("Nova versão", selectField(`nv-select nv-${s.novaVersao} d-nv`, k, s.novaVersao, NV_OPTIONS))}
         ${campo("Endereço novo", `<input class="f f-mono d-novo" type="text" ${k} value="${esc(s.enderecoNovo)}" spellcheck="false" />`)}
       </div>
     </section>
-    <section class="dsec"><h3>Checagens${s.verificadoEm ? ` · ${s.verificadoEm}` : ""}</h3>
-      <div class="dgrid">
+    <section class="dsec"><h3>Checagens${s.verificadoEm ? ` · varredura de ${s.verificadoEm}` : ""}</h3>
+      ${checksHtml(s, k)}
+      <div class="dica">Clique em cada uma para marcar à mão: automático → ok → problema. Com ponto, é marcação sua.</div>
+      <div class="dgrid" style="margin-top:12px">
         ${campo("Disponibilidade", `<div class="val">${ar}</div>`)}
         ${campo("Rodapé", `<div class="val">${rod}</div>`)}
       </div>
@@ -1288,6 +1449,9 @@ function handleDrawerEdit(ev) {
       s.situacao = "pronto";
       registrar(s, "Situação: Remodelar → Pronto, pela nova versão feita.");
     }
+  } else if (c.contains("d-linkdef")) {
+    s.linkDefinitivo = el.checked;
+    registrar(s, el.checked ? "Cliente escolheu ficar com o endereço softaliza: sai da versão inicial." : "Voltou a contar como versão inicial.");
   } else if (c.contains("d-novo")) {
     registrar(s, `Endereço novo: ${el.value || "(vazio)"}.`);
     s.enderecoNovo = el.value;
@@ -1398,7 +1562,7 @@ function renderNavCounts() {
   document.getElementById("count-prospectos").textContent = prospectosAtuais().length;
 }
 
-const RENDER = { sites: renderSites, remodelar: renderRemodelar, seo: renderSeo, prospectos: renderProspectos };
+const RENDER = { painel: renderPainel, sites: renderSites, remodelar: renderRemodelar, seo: renderSeo, prospectos: renderProspectos };
 
 function renderTudo() {
   RENDER[STATE.tab]();
@@ -1543,6 +1707,7 @@ async function init() {
   initChips("sites-chips-tipo", (v) => ((STATE.sites.tipo = v), renderSites()));
   initChips("sites-chips-situacao", (v) => ((STATE.sites.situacao = v), renderSites()));
   initChips("sites-chips-saude", (v) => ((STATE.sites.saude = v), renderSites()));
+  initChips("sites-chips-versao", (v) => ((STATE.sites.versao = v), renderSites()));
   initChips("remodelar-chips-tipo", (v) => ((STATE.remodelar.tipo = v), renderRemodelar()));
   initChips("remodelar-chips-nv", (v) => ((STATE.remodelar.nv = v), renderRemodelar()));
   initChips("seo-chips-veredito", (v) => ((STATE.seo.veredito = v), renderSeo()));
@@ -1559,6 +1724,8 @@ async function init() {
     if (change) el.addEventListener("change", change);
     if (click) el.addEventListener("click", click);
   };
+  liga("painel-alertas", null, handlePainelClick);
+  liga("painel-recortes", null, handlePainelClick);
   liga("sites-table-body", handleSitesEdit, handleSitesClick);
   liga("remodelar-table-body", handleRemodelarEdit, handleRemodelarClick);
   liga("seo-table-body", handleSeoEdit, handleSeoClick);
@@ -1579,7 +1746,7 @@ async function init() {
   try {
     saved = localStorage.getItem(TAB_KEY);
   } catch (e) {}
-  setTab(PAGES[saved] ? saved : "sites");
+  setTab(PAGES[saved] ? saved : "painel");
 }
 
 document.addEventListener("DOMContentLoaded", init);
