@@ -55,11 +55,6 @@
           <span class="nav-text">Remodelar</span>
           <span class="nav-count" id="count-remodelar">0</span>
         </button>
-        <button class="nav-item" data-tab="seo" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8.5 11.5l2 2 3.5-4"/></svg>
-          <span class="nav-text">SEO e saúde</span>
-          <span class="nav-count" id="count-seo">0</span>
-        </button>
       </nav>
 
       <div class="rail-label">Oportunidades</div>
@@ -136,6 +131,7 @@
               <button class="chip" data-value="fora-do-ar" type="button"><span class="chip-dot d-risk"></span>Fora do ar</button>
               <button class="chip" data-value="sem-rodape" type="button"><span class="chip-dot d-warn"></span>Sem rodapé</button>
               <button class="chip" data-value="sem-seo" type="button"><span class="chip-dot d-risk"></span>Sem SEO</button>
+              <button class="chip" data-value="indexacao" type="button"><span class="chip-dot d-risk"></span>Indexação fora da regra</button>
             </div>
             <div class="chips" id="sites-chips-versao" role="group" aria-label="Filtrar por versão">
               <button class="chip on" data-value="" type="button">Toda versão</button>
@@ -192,6 +188,19 @@
               <button class="chip" data-value="personalizado" type="button">Personalizado</button>
               <button class="chip" data-value="hotsite" type="button">Hotsite</button>
             </div>
+            <div class="chips" id="eventos-chips-checagem" role="group" aria-label="Filtrar por checagem">
+              <button class="chip on" data-value="" type="button">Toda checagem</button>
+              <button class="chip" data-value="fora-do-ar" type="button"><span class="chip-dot d-risk"></span>Fora do ar</button>
+              <button class="chip" data-value="sem-rodape" type="button"><span class="chip-dot d-warn"></span>Sem rodapé</button>
+              <button class="chip" data-value="sem-seo" type="button"><span class="chip-dot d-risk"></span>Sem SEO</button>
+              <button class="chip" data-value="indexacao" type="button"><span class="chip-dot d-risk"></span>Indexação fora da regra</button>
+            </div>
+            <div class="chips" id="eventos-chips-versao" role="group" aria-label="Filtrar por versão">
+              <button class="chip on" data-value="" type="button">Toda versão</button>
+              <button class="chip" data-value="inicial" type="button"><span class="chip-dot d-warn"></span>Versão inicial</button>
+              <button class="chip" data-value="definitivo" type="button"><span class="chip-dot d-accent"></span>Link definitivo</button>
+              <button class="chip" data-value="proprio" type="button"><span class="chip-dot d-ok"></span>Domínio próprio</button>
+            </div>
           </div>
 
           <div class="card">
@@ -236,7 +245,8 @@
             <div class="chips" id="remodelar-chips-nv" role="group" aria-label="Filtrar por nova versão">
               <button class="chip on" data-value="" type="button">Todas</button>
               <button class="chip" data-value="pendente" type="button"><span class="chip-dot d-warn"></span>Pendentes</button>
-              <button class="chip" data-value="feita" type="button"><span class="chip-dot d-ok"></span>Feitas</button>
+              <button class="chip" data-value="validacao" type="button"><span class="chip-dot d-accent"></span>Em validação</button>
+              <button class="chip" data-value="migrado" type="button"><span class="chip-dot d-ok"></span>Migrados</button>
               <button class="chip" data-value="nao" type="button"><span class="chip-dot d-risk"></span>Não</button>
             </div>
           </div>
@@ -267,77 +277,6 @@
           </div>
         </section>
 
-        <!-- ======================================================= SEO -->
-        <section id="panel-seo" class="panel">
-          <div class="metrics" id="seo-metrics"></div>
-          <div class="comp-grid" id="seo-composition"></div>
-
-          <div class="filters">
-            <div class="search">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-              <input type="text" id="seo-search" placeholder="Buscar por nome, sigla ou endereço…" autocomplete="off" />
-              <kbd>/</kbd>
-            </div>
-            <div class="chips" id="seo-chips-veredito" role="group" aria-label="Filtrar por situação de SEO">
-              <button class="chip on" data-value="" type="button">Tudo</button>
-              <button class="chip" data-value="nao" type="button"><span class="chip-dot d-risk"></span>Sem SEO</button>
-              <button class="chip" data-value="fraco" type="button"><span class="chip-dot d-warn"></span>Configurando</button>
-              <button class="chip" data-value="provavel" type="button"><span class="chip-dot d-accent"></span>Bom</button>
-              <button class="chip" data-value="forte" type="button"><span class="chip-dot d-ok"></span>Pronto</button>
-            </div>
-            <div class="chips" id="seo-chips-conformidade" role="group" aria-label="Filtrar por indexação">
-              <button class="chip on" data-value="" type="button">Toda indexação</button>
-              <button class="chip" data-value="fora" type="button"><span class="chip-dot d-risk"></span>Fora da regra</button>
-              <button class="chip" data-value="fechar" type="button"><span class="chip-dot d-warn"></span>Fechar</button>
-              <button class="chip" data-value="abrir" type="button"><span class="chip-dot d-risk"></span>Liberar</button>
-              <button class="chip" data-value="ok" type="button"><span class="chip-dot d-ok"></span>Correto</button>
-            </div>
-            <div class="chips" id="seo-chips-evento" role="group" aria-label="Filtrar por tipo">
-              <button class="chip on" data-value="" type="button">Todos</button>
-              <button class="chip" data-value="associacao" type="button">Só associações</button>
-              <button class="chip" data-value="ativos" type="button">Só eventos ativos</button>
-            </div>
-            <div class="chips" id="seo-chips-checagem" role="group" aria-label="Filtrar por checagem">
-              <button class="chip on" data-value="" type="button">Toda checagem</button>
-              <button class="chip" data-value="fora-do-ar" type="button"><span class="chip-dot d-risk"></span>Fora do ar</button>
-              <button class="chip" data-value="sem-rodape" type="button"><span class="chip-dot d-warn"></span>Sem rodapé</button>
-              <button class="chip" data-value="sem-seo" type="button"><span class="chip-dot d-risk"></span>Sem SEO</button>
-            </div>
-            <div class="chips" id="seo-chips-versao" role="group" aria-label="Filtrar por versão">
-              <button class="chip on" data-value="" type="button">Toda versão</button>
-              <button class="chip" data-value="inicial" type="button"><span class="chip-dot d-warn"></span>Versão inicial</button>
-              <button class="chip" data-value="definitivo" type="button"><span class="chip-dot d-accent"></span>Link definitivo</button>
-              <button class="chip" data-value="proprio" type="button"><span class="chip-dot d-ok"></span>Domínio próprio</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <h2>SEO, rodapé e disponibilidade</h2>
-              <span class="count" id="seo-count"></span>
-              <span class="spacer"></span>
-              <div class="progress-inline" id="seo-progress"></div>
-            </div>
-            <div class="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th class="sortable" data-sort="nome">Site <span class="arrow"></span></th>
-                    <th class="sortable" data-sort="seo">Na busca <span class="arrow"></span></th>
-                    <th>Indexado?</th>
-                    <th>Indexação</th>
-                    <th>Rodapé</th>
-                    <th>No ar</th>
-                    <th>Pesquisa</th>
-                  </tr>
-                </thead>
-                <tbody id="seo-table-body"></tbody>
-              </table>
-            </div>
-          </div>
-
-          <p class="seo-nota" id="seo-nota"></p>
-        </section>
 
         <!-- ================================================ prospectos -->
         <section id="panel-prospectos" class="panel">

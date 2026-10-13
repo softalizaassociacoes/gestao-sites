@@ -987,7 +987,10 @@ select.enc-fraco:hover, select.enc-fraco:focus { background-color: var(--warn-so
 select.enc-nao:hover, select.enc-nao:focus { background-color: var(--risk-soft); }
 select.seo-encontravel { min-width: 132px; }
 
-select.nv-feita { background-color: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+select.nv-migrado { background-color: var(--ok-soft); color: var(--ok); border-color: var(--ok-line); }
+select.nv-validacao { background-color: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+select.nv-migrado:hover, select.nv-migrado:focus { background-color: var(--ok-soft); }
+select.nv-validacao:hover, select.nv-validacao:focus { background-color: var(--accent-soft); }
 select.nv-pendente { background-color: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
 select.nv-nao { background-color: var(--risk-soft); color: var(--risk); border-color: var(--risk-line); }
 
