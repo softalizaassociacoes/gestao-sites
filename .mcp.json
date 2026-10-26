@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gestao-sites": {
+      "command": "node",
+      "args": ["mcp/servidor.js"],
+      "env": {
+        "GESTAO_URL": "https://controlesites.softaliza.com.br",
+        "GESTAO_TOKEN": "${GESTAO_TOKEN}"
+      }
+    }
+  }
+}
