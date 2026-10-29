@@ -229,8 +229,8 @@ const FERRAMENTAS = [
   {
     name: "varrer",
     description:
-      "Abre os sites de verdade e confere: se estão no ar, se têm o rodapé da Softaliza e se têm o widget do TomTicket. " +
-      "Por padrão só relata; com gravar=true, atualiza os campos medidos no painel (no ar, rodapé, data da varredura).",
+      "Abre os sites de verdade e confere: se estão no ar, se têm o rodapé da Softaliza, se têm Analytics ou Tag Manager e se têm o widget do TomTicket. " +
+      "Por padrão só relata; com gravar=true, atualiza os campos medidos no painel (no ar, rodapé, analytics, data da varredura).",
     inputSchema: {
       type: "object",
       properties: {
@@ -465,6 +465,7 @@ const EXECUTAR = {
           status: r.status,
           noAr: r.status >= 200 && r.status < 400,
           rodape: /softaliza/i.test(html),
+          analytics: /googletagmanager\.com|google-analytics\.com|gtag\s*\(|["']GTM-[A-Z0-9]{4,}["']|["']G-[A-Z0-9]{6,}["']|["']UA-\d{4,}/i.test(html),
           tomticket: /tomticket/i.test(html),
         };
       } catch (e) {
@@ -483,12 +484,16 @@ const EXECUTAR = {
     if (a.gravar) {
       for (const r of saida) {
         if (r.falhou) continue; // falha de rede não vira dado
-        const antes = `${r.s.noAr}|${r.s.rodapeSoftaliza}`;
+        const antes = `${r.s.noAr}|${r.s.rodapeSoftaliza}|${r.s.analytics}`;
         r.s.noAr = r.noAr;
         r.s.rodapeSoftaliza = r.noAr ? !!r.rodape : r.s.rodapeSoftaliza;
+        r.s.analytics = r.noAr ? !!r.analytics : r.s.analytics;
         r.s.verificadoEm = hoje();
-        if (antes !== `${r.s.noAr}|${r.s.rodapeSoftaliza}`) {
-          registrar(r.s, `Varredura: ${r.noAr ? "no ar" : "fora do ar"}, rodapé ${r.rodape ? "encontrado" : "não encontrado"}.`);
+        if (antes !== `${r.s.noAr}|${r.s.rodapeSoftaliza}|${r.s.analytics}`) {
+          registrar(
+            r.s,
+            `Varredura: ${r.noAr ? "no ar" : "fora do ar"}, rodapé ${r.rodape ? "encontrado" : "não encontrado"}, analytics ${r.analytics ? "instalado" : "não encontrado"}.`
+          );
         }
         await gravar(r.s);
         gravados++;
@@ -497,6 +502,7 @@ const EXECUTAR = {
 
     const fora = saida.filter((r) => !r.noAr);
     const semRodape = saida.filter((r) => r.noAr && !r.rodape);
+    const semAnalytics = saida.filter((r) => r.noAr && !r.analytics);
     const comTom = saida.filter((r) => r.tomticket);
     const bloco = (titulo, lista, formata) =>
       `${titulo}: ${lista.length}${lista.length ? "\n" + lista.map(formata).join("\n") : ""}`;
@@ -508,6 +514,8 @@ const EXECUTAR = {
         bloco("Fora do ar ou sem resposta", fora, (r) => `  ${r.s.nome} — ${r.status} ${r.erro || ""} — ${r.s.url}`),
         "",
         bloco("No ar e sem o rodapé da Softaliza", semRodape, (r) => `  ${r.s.nome} — ${r.s.url}`),
+        "",
+        bloco("No ar e sem Analytics nem Tag Manager", semAnalytics, (r) => `  ${r.s.nome} — ${r.s.url}`),
         "",
         bloco("Com o widget do TomTicket", comTom, (r) => `  ${r.s.nome} — ${r.s.url}`),
         a.gravar ? `\nGravei a medição em ${gravados} registro(s).` : "\nNada foi gravado no painel (use gravar=true para isso).",

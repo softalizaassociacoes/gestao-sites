@@ -18,7 +18,7 @@ Sem dependências e sem build: um arquivo, `servidor.js`, rodando no Node 18+.
 | `anotar` | Só acrescenta uma linha ao histórico |
 | `criar_site` | Cadastra um site novo |
 | `resumo` | Os números do dashboard |
-| `varrer` | Abre os sites de verdade e confere se estão no ar, se têm o rodapé da Softaliza e se têm o widget do TomTicket |
+| `varrer` | Abre os sites de verdade e confere se estão no ar, se têm o rodapé da Softaliza, se têm Analytics ou Tag Manager e se têm o widget do TomTicket |
 
 Em `atualizar_site`, mande só os campos que quer mudar: o servidor lê o
 registro atual, mescla e grava inteiro, então nada se perde.

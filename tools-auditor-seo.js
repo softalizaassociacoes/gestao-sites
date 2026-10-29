@@ -84,7 +84,8 @@ async function auditar(alvo) {
       r.ogImagem = metaConteudo(html, "og:image");
       r.lang = texto(html, /<html[^>]+lang=["']([^"']*)["']/i);
       r.viewport = !!metaConteudo(html, "viewport");
-      r.temGA = /googletagmanager\.com|google-analytics\.com|gtag\(/i.test(html);
+      // medição: GA clássico, GA4, Tag Manager — pelo script ou pelo id
+      r.temGA = /googletagmanager\.com|google-analytics\.com|gtag\s*\(|["']GTM-[A-Z0-9]{4,}["']|["']G-[A-Z0-9]{6,}["']|["']UA-\d{4,}/i.test(html);
       // crédito da Softaliza no rodapé: procura o nome num <footer>, e na falta
       // dele no último quinto da página, que é onde o rodapé costuma estar
       const footer = (html.match(/<footer[\s\S]*?<\/footer>/i) || [""])[0];
@@ -179,6 +180,7 @@ function avaliar(r) {
     if (!r.sitemap) avisos.push("sem sitemap.xml");
     if (r.robotsStatus !== 200) avisos.push("sem robots.txt");
     if (!r.ogTitulo || !r.ogImagem) avisos.push("Open Graph incompleto");
+    if (!r.temGA) avisos.push("sem Analytics nem Tag Manager");
     if (!r.lang) avisos.push("sem lang no <html>");
     if (!r.viewport) avisos.push("sem meta viewport");
     if (r.tempoMs > 4000) avisos.push(`resposta lenta (${(r.tempoMs / 1000).toFixed(1)}s)`);

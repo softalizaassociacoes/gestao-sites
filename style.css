@@ -1352,7 +1352,11 @@ dialog.modal[open] { animation: modal-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) bot
 /* ================================================================== v3 */
 /* ---------------------------------------------------- checagens por site */
 
-.checks { display: flex; gap: 4px; }
+/* com quatro checagens a coluna ficou larga demais para a tela de 1440 e a
+   tabela passou a rolar de lado, perdendo o cabeçalho fixo. Deixando quebrar,
+   ela cabe de novo; o min-width impede que a quebra vá longe demais e deixe
+   uma pílula por linha — com ele, são duas e duas. */
+.checks { display: flex; gap: 4px; flex-wrap: wrap; min-width: 176px; }
 .check {
   display: inline-flex;
   align-items: center;

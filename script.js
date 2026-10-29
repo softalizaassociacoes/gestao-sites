@@ -71,6 +71,8 @@ function normalizarSite(s) {
     ano: s.ano == null ? null : Number(s.ano),
     seo,
     rodapeSoftaliza: s.rodapeSoftaliza == null ? null : !!s.rodapeSoftaliza,
+    // tem Google Analytics, GA4 ou Tag Manager na página
+    analytics: s.analytics == null ? null : !!s.analytics,
     noAr: s.noAr == null ? null : !!s.noAr,
     verificadoEm: s.verificadoEm || null,
     // decisão do cliente de ficar com o endereço softaliza como definitivo
@@ -84,6 +86,7 @@ function normalizarSite(s) {
       ar: s.checagemManual && s.checagemManual.ar != null ? !!s.checagemManual.ar : null,
       rodape: s.checagemManual && s.checagemManual.rodape != null ? !!s.checagemManual.rodape : null,
       seo: s.checagemManual && s.checagemManual.seo != null ? !!s.checagemManual.seo : null,
+      analytics: s.checagemManual && s.checagemManual.analytics != null ? !!s.checagemManual.analytics : null,
     },
     historico: Array.isArray(s.historico) ? s.historico : [],
     manual: !!s.manual,
@@ -111,7 +114,7 @@ function mesclarComBase(lista, base) {
           encontravel: r.seo && r.seo.encontravelManual ? r.seo.encontravel : b.seo.encontravel,
         }
       : r.seo;
-    return { ...r, seo, rodapeSoftaliza: b.rodapeSoftaliza, noAr: b.noAr, verificadoEm: b.verificadoEm };
+    return { ...r, seo, rodapeSoftaliza: b.rodapeSoftaliza, analytics: b.analytics, noAr: b.noAr, verificadoEm: b.verificadoEm };
   });
 
   const vistos = new Set(lista.map((r) => r.id));
@@ -596,21 +599,23 @@ function checagem(s, qual) {
   if (manual != null) return { valor: manual, manual: true };
   if (qual === "ar") return { valor: s.noAr, manual: false };
   if (qual === "rodape") return { valor: s.noAr === false ? null : s.rodapeSoftaliza, manual: false };
+  if (qual === "analytics") return { valor: s.noAr === false ? null : s.analytics, manual: false };
   return { valor: s.seo ? s.seo.encontravel !== "nao" && s.seo.encontravel !== "fraco" : null, manual: false };
 }
 
-// As três checagens, clicáveis: cada clique cicla automático → sim → não.
+// As checagens, clicáveis: cada clique cicla automático → sim → não.
 // Marcado à mão ganha ponto, para distinguir do que veio da varredura.
 const CHECK_ROTULO = {
   ar: { sim: "No ar", nao: "Fora do ar", vazio: "Ar ?" },
   rodape: { sim: "Rodapé", nao: "Sem rodapé", vazio: "Rodapé ?" },
   seo: { sim: "SEO ok", nao: "SEO ruim", vazio: "SEO ?" },
+  analytics: { sim: "Analytics", nao: "Sem analytics", vazio: "Analytics ?" },
 };
 
 function checkHtml(s, qual, k) {
   const { valor, manual } = checagem(s, qual);
   const r = CHECK_ROTULO[qual];
-  const cls = valor == null ? "c-unk" : valor ? "c-ok" : qual === "rodape" ? "c-warn" : "c-bad";
+  const cls = valor == null ? "c-unk" : valor ? "c-ok" : qual === "rodape" || qual === "analytics" ? "c-warn" : "c-bad";
   const texto = valor == null ? r.vazio : valor ? r.sim : r.nao;
   const origem = manual ? "marcado à mão" : s.verificadoEm ? `da varredura de ${s.verificadoEm}` : "sem checagem";
   return `<button type="button" class="check ${cls}${manual ? " c-man" : ""}" data-check="${qual}" ${k}
@@ -618,7 +623,7 @@ function checkHtml(s, qual, k) {
 }
 
 function checksHtml(s, k) {
-  return `<div class="checks">${checkHtml(s, "ar", k)}${checkHtml(s, "rodape", k)}${checkHtml(s, "seo", k)}</div>`;
+  return `<div class="checks">${checkHtml(s, "ar", k)}${checkHtml(s, "rodape", k)}${checkHtml(s, "seo", k)}${checkHtml(s, "analytics", k)}</div>`;
 }
 
 // automático → sim → não → automático
@@ -626,7 +631,7 @@ function ciclarChecagem(s, qual) {
   const atual = s.checagemManual[qual];
   const proximo = atual == null ? true : atual === true ? false : null;
   s.checagemManual[qual] = proximo;
-  const nome = { ar: "Disponibilidade", rodape: "Rodapé", seo: "SEO" }[qual];
+  const nome = { ar: "Disponibilidade", rodape: "Rodapé", seo: "SEO", analytics: "Analytics" }[qual];
   registrar(s, proximo == null ? `${nome}: voltou a seguir a varredura.` : `${nome}: marcado à mão como ${proximo ? "ok" : "problema"}.`);
 }
 
@@ -868,12 +873,14 @@ function renderPainel() {
   const [arA, arE] = porTipo((s) => checagem(s, "ar").valor === false);
   const [seoA, seoE] = porTipo((s) => checagem(s, "seo").valor === false);
   const [rodA, rodE] = porTipo((s) => checagem(s, "ar").valor !== false && checagem(s, "rodape").valor === false);
+  const [anaA, anaE] = porTipo((s) => checagem(s, "ar").valor !== false && checagem(s, "analytics").valor === false);
   const [idxA, idxE] = porTipo((s) => s.seo && (s.seo.conformidade === "fechar" || s.seo.conformidade === "abrir"));
 
   document.getElementById("painel-alertas").innerHTML = [
     { valor: arA, rotulo: "Associações fora do ar", sub: `${arE} eventos também fora do ar`, tom: "risco", ir: ["sites", { ...zeraSites, saude: "fora-do-ar" }] },
     { valor: seoA, rotulo: "Associações sem SEO", sub: `${seoE} eventos também sem SEO`, tom: "risco", ir: ["sites", { ...zeraSites, saude: "sem-seo" }] },
     { valor: rodA, rotulo: "Associações sem rodapé", sub: `${rodE} eventos também sem o crédito`, tom: "aviso", ir: ["sites", { ...zeraSites, saude: "sem-rodape" }] },
+    { valor: anaA, rotulo: "Associações sem analytics", sub: `${anaE} eventos também sem medição`, tom: "aviso", ir: ["sites", { ...zeraSites, saude: "sem-analytics" }] },
     { valor: idxA, rotulo: "Indexação fora da regra", sub: `${idxE} eventos também fora da regra`, tom: "aviso", ir: ["sites", { ...zeraSites, saude: "indexacao" }] },
   ]
     .map(cartao)
@@ -979,6 +986,7 @@ function renderSites() {
     if (st.saude === "fora-do-ar" && checagem(s, "ar").valor !== false) return false;
     if (st.saude === "sem-rodape" && !(checagem(s, "ar").valor !== false && checagem(s, "rodape").valor === false)) return false;
     if (st.saude === "sem-seo" && checagem(s, "seo").valor !== false) return false;
+    if (st.saude === "sem-analytics" && checagem(s, "analytics").valor !== false) return false;
     if (st.saude === "indexacao" && !(s.seo && (s.seo.conformidade === "fechar" || s.seo.conformidade === "abrir"))) return false;
     if (st.versao === "inicial" && !versaoInicial(s)) return false;
     if (st.versao === "definitivo" && !(emSoftaliza(s) && s.linkDefinitivo)) return false;
@@ -1148,6 +1156,7 @@ function renderEventos() {
     if (st.checagem === "fora-do-ar" && checagem(s, "ar").valor !== false) return false;
     if (st.checagem === "sem-rodape" && !(checagem(s, "ar").valor !== false && checagem(s, "rodape").valor === false)) return false;
     if (st.checagem === "sem-seo" && checagem(s, "seo").valor !== false) return false;
+    if (st.checagem === "sem-analytics" && checagem(s, "analytics").valor !== false) return false;
     if (st.checagem === "indexacao" && !(s.seo && (s.seo.conformidade === "fechar" || s.seo.conformidade === "abrir"))) return false;
     if (st.versao === "inicial" && !versaoInicial(s)) return false;
     if (st.versao === "definitivo" && !(emSoftaliza(s) && s.linkDefinitivo)) return false;
@@ -1478,6 +1487,7 @@ function renderDrawer(s) {
 
   const ar = s.noAr == null ? "sem checagem" : s.noAr ? "no ar" : "fora do ar";
   const rod = s.noAr === false || s.rodapeSoftaliza == null ? "sem checagem" : s.rodapeSoftaliza ? "credita a Softaliza" : "sem o crédito da Softaliza";
+  const ana = s.noAr === false || s.analytics == null ? "sem checagem" : s.analytics ? "com medição instalada" : "sem Analytics nem Tag Manager";
 
   document.getElementById("drawer-body").innerHTML = `
     <section class="dsec"><h3>Cadastro</h3>
@@ -1526,6 +1536,7 @@ function renderDrawer(s) {
       <div class="dgrid" style="margin-top:12px">
         ${campo("Disponibilidade", `<div class="val">${ar}</div>`)}
         ${campo("Rodapé", `<div class="val">${rod}</div>`)}
+        ${campo("Analytics", `<div class="val">${ana}</div>`)}
       </div>
     </section>
     <section class="dsec"><h3>SEO</h3>${auditoria}</section>
@@ -1663,10 +1674,10 @@ function exportCsv() {
   } else {
     const lista = VIEW[STATE.tab] || VIEW.sites;
     name = `${STATE.tab}.csv`;
-    head = ["Site", "Nome completo", "Tipo", "Status do evento", "Ano", "Endereço", "Plataforma", "Situação", "Nova versão", "Endereço novo", "MRR", "Saúde", "No ar", "Rodapé Softaliza", "Na busca", "Indexação", "Indexado", "Pesquisa", "Verificado em"];
+    head = ["Site", "Nome completo", "Tipo", "Status do evento", "Ano", "Endereço", "Plataforma", "Situação", "Nova versão", "Endereço novo", "MRR", "Saúde", "No ar", "Rodapé Softaliza", "Analytics", "Na busca", "Indexação", "Indexado", "Pesquisa", "Verificado em"];
     rows = lista.map((s) => [
       s.nome, s.nomeCompleto || "", s.tipo, s.statusEvento || "", s.ano ?? "", s.url, labelOf(PLATAFORMA_OPTIONS, s.plataforma), SITUACAO_META[s.situacao].label,
-      labelOf(NV_OPTIONS, s.novaVersao), s.enderecoNovo || "", s.mrr ?? "", (SAUDE_META[s.saude] || {}).label || "", sim(s.noAr), sim(s.rodapeSoftaliza),
+      labelOf(NV_OPTIONS, s.novaVersao), s.enderecoNovo || "", s.mrr ?? "", (SAUDE_META[s.saude] || {}).label || "", sim(s.noAr), sim(s.rodapeSoftaliza), sim(s.analytics),
       s.seo ? ENCONTRAVEL_META[s.seo.encontravel].label : "", s.seo ? CONFORMIDADE_META[s.seo.conformidade].label : "", s.seo ? sim(s.seo.indexado) : "", s.seo ? s.seo.pesquisa : "", s.verificadoEm || "",
     ]);
   }
