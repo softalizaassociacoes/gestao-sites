@@ -461,7 +461,11 @@ const CONFORMIDADE_META = {
   "fora-do-ar": { label: "Fora do ar", cls: "b-none", dica: "não dá para avaliar" },
 };
 
-const ANO_ATUAL = new Date().getFullYear();
+// O que entra sozinho num registro novo: os eventos que estão chegando são de
+// 2027, e site novo nasce personalizado — WordPress é o que estamos deixando
+// para trás. Quando a virada do ano pedir, é só mexer aqui.
+const ANO_PADRAO = 2027;
+const PLATAFORMA_PADRAO = "personalizado";
 
 // ---------------------------------------------------------------------------
 // Utilidades de apresentação
@@ -677,7 +681,7 @@ const ADD_FIELDS = [
   { name: "nomeCompleto", label: "Nome completo", ph: "Opcional" },
   { name: "url", label: "Endereço", ph: "ex.: abc.org.br", required: true },
   { name: "tipo", label: "Tipo", options: TIPO_OPTIONS },
-  { name: "plataforma", label: "Plataforma", options: PLATAFORMA_OPTIONS },
+  { name: "plataforma", label: "Plataforma", options: PLATAFORMA_OPTIONS, padrao: PLATAFORMA_PADRAO },
 ];
 
 function criarSite(v) {
@@ -694,7 +698,7 @@ function criarSite(v) {
     plataforma: v.plataforma,
     situacao: v.plataforma === "wordpress" ? "remodelar" : "construcao",
     statusEvento: v.tipo === "evento" ? "a_acontecer" : null,
-    ano: v.tipo === "evento" ? ANO_ATUAL : null,
+    ano: v.tipo === "evento" ? ANO_PADRAO : null,
     manual: true,
     historico: [{ em: hoje(), texto: "Cadastrado à mão no painel." }],
   });
@@ -712,7 +716,7 @@ function openAddDialog(prefill) {
   const body = document.getElementById("dlg-add-body");
   body.innerHTML =
     ADD_FIELDS.map((f) => {
-      const val = (prefill && prefill[f.name]) || "";
+      const val = (prefill && prefill[f.name]) || f.padrao || "";
       const controle = f.options
         ? `<select id="add-${f.name}" name="${f.name}">${f.options.map((o) => `<option value="${o.value}" ${o.value === val ? "selected" : ""}>${o.label}</option>`).join("")}</select>`
         : `<input type="text" id="add-${f.name}" name="${f.name}" value="${esc(val)}" placeholder="${esc(f.ph || "")}" autocomplete="off" />`;
@@ -1127,7 +1131,7 @@ function renderEventosTable(list) {
       const k = `data-id="${esc(s.id)}"`;
       return `<tr class="abre" ${k}>
         <td class="ident-td" data-l="Evento">${identCell(s)}</td>
-        <td class="num" data-l="Ano"><input class="f f-num e-ano" type="text" inputmode="numeric" maxlength="4" ${k} value="${esc(s.ano)}" placeholder="${ANO_ATUAL}" /></td>
+        <td class="num" data-l="Ano"><input class="f f-num e-ano" type="text" inputmode="numeric" maxlength="4" ${k} value="${esc(s.ano)}" placeholder="${ANO_PADRAO}" /></td>
         <td data-l="Status">${selectField("e-status", k, s.statusEvento || "a_acontecer", STATUS_EVENTO_OPTIONS)}</td>
         <td data-l="Plataforma">${selectField("e-plataforma", k, s.plataforma, PLATAFORMA_OPTIONS)}</td>
         <td data-l="Endereço">${linkCell("e-url", k, s.url)}</td>
@@ -1178,7 +1182,7 @@ function handleEventosEdit(ev) {
   if (!s) return;
   if (el.classList.contains("e-ano")) {
     const d = el.value.replace(/[^\d]/g, "").slice(0, 4);
-    s.ano = d ? Number(d) : ANO_ATUAL;
+    s.ano = d ? Number(d) : ANO_PADRAO;
   } else if (el.classList.contains("e-status")) {
     registrar(s, `Status do evento: ${STATUS_EVENTO_LABEL[s.statusEvento] || "—"} → ${STATUS_EVENTO_LABEL[el.value]}.`);
     s.statusEvento = el.value;
@@ -1432,7 +1436,7 @@ function handleProspectosClick(ev) {
   if (!btn) return;
   const p = PROSPECTOS.find((x) => x.sigla === btn.dataset.sigla);
   if (!p) return;
-  openAddDialog({ nome: p.sigla, nomeCompleto: p.nome || "", url: p.siteAtual || "", tipo: "associacao", plataforma: "wordpress" });
+  openAddDialog({ nome: p.sigla, nomeCompleto: p.nome || "", url: p.siteAtual || "", tipo: "associacao", plataforma: PLATAFORMA_PADRAO });
 }
 
 // ---------------------------------------------------------------------------
@@ -1576,7 +1580,7 @@ function handleDrawerEdit(ev) {
     s.mrr = Number.isFinite(n) ? n : null;
   } else if (c.contains("d-ano")) {
     const d = el.value.replace(/[^\d]/g, "").slice(0, 4);
-    s.ano = d ? Number(d) : ANO_ATUAL;
+    s.ano = d ? Number(d) : ANO_PADRAO;
   } else if (c.contains("d-nv")) {
     registrar(s, `Nova versão: ${labelOf(NV_OPTIONS, s.novaVersao)} → ${labelOf(NV_OPTIONS, el.value)}.`);
     s.novaVersao = el.value;

@@ -24,6 +24,10 @@ const NOVA_VERSAO = { nao: "Não", pendente: "Pendente", validacao: "Em validaç
 const PLATAFORMA = { wordpress: "WordPress", personalizado: "Personalizado", hotsite: "Hotsite" };
 const STATUS_EVENTO = { a_acontecer: "A acontecer", acontecendo: "Acontecendo", realizado: "Realizado" };
 
+// Padrões de registro novo, iguais aos do painel.
+const ANO_PADRAO = 2027;
+const PLATAFORMA_PADRAO = "personalizado";
+
 const hoje = () => new Date().toISOString().slice(0, 10);
 
 // ---------------------------------------------------------------------------
@@ -206,7 +210,7 @@ const FERRAMENTAS = [
   },
   {
     name: "criar_site",
-    description: "Cadastra um site novo no painel.",
+    description: "Cadastra um site novo no painel. Sem plataforma, entra como personalizado; evento sem ano entra como 2027.",
     inputSchema: {
       type: "object",
       properties: {
@@ -216,7 +220,7 @@ const FERRAMENTAS = [
         tipo: { type: "string", enum: ["associacao", "evento"] },
         plataforma: { type: "string", enum: ["wordpress", "personalizado", "hotsite"] },
         situacao: { type: "string", enum: ["pronto", "remodelar", "construcao", "desativado"] },
-        ano: { type: "number", description: "Só para evento." },
+        ano: { type: "number", description: "Só para evento. Sem valor, entra como 2027." },
       },
       required: ["nome", "tipo"],
     },
@@ -389,13 +393,13 @@ const EXECUTAR = {
       nome: base,
       nomeCompleto: a.nome_completo || null,
       url: a.url || "",
-      plataforma: a.plataforma || "wordpress",
-      situacao: a.situacao || (!a.plataforma || a.plataforma === "wordpress" ? "remodelar" : "pronto"),
+      plataforma: a.plataforma || PLATAFORMA_PADRAO,
+      situacao: a.situacao || ((a.plataforma || PLATAFORMA_PADRAO) === "wordpress" ? "remodelar" : "construcao"),
       novaVersao: "pendente",
       enderecoNovo: "",
       mrr: null,
       statusEvento: a.tipo === "evento" ? "a_acontecer" : null,
-      ano: a.tipo === "evento" ? a.ano || new Date().getFullYear() : null,
+      ano: a.tipo === "evento" ? a.ano || ANO_PADRAO : null,
       seo: null,
       rodapeSoftaliza: null,
       noAr: null,
