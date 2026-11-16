@@ -360,31 +360,40 @@ const STATE = {
 
 const VIEW = { sites: [], eventos: [], remodelar: [], prospectos: [] };
 
+// O que entra sozinho num registro novo: os eventos que estão chegando são de
+// 2027, e site novo nasce personalizado — WordPress é o que estamos deixando
+// para trás. Quando a virada do ano pedir, é só mexer aqui.
+const ANO_PADRAO = 2027;
+const PLATAFORMA_PADRAO = "personalizado";
+
+// O botão de adicionar é da aba em que você está: em Eventos nasce evento, em
+// Remodelar já entra na fila. `novo` diz o que o botão escreve, o que o diálogo
+// pede e onde o registro vai parar.
 const PAGES = {
   painel: {
     title: "Dashboard",
     sub: "A carteira de sites num relance: o que está no ar, o que falta migrar e o que precisa de atenção.",
-    add: "Novo site",
+    novo: { add: "Novo site", titulo: "Novo site", sub: "Entra na lista de sites e é gravado no banco." },
   },
   sites: {
     title: "Sites",
     sub: "Os sites de associação da Softaliza, com situação, saúde e histórico.",
-    add: "Novo site",
+    novo: { add: "Novo site", titulo: "Novo site", sub: "Entra na aba Sites, como associação, e é gravado no banco.", tipo: "associacao" },
   },
   eventos: {
     title: "Eventos",
     sub: "Os sites de congressos e eventos, com ano e status de cada um.",
-    add: "Novo site",
+    novo: { add: "Novo evento", titulo: "Novo evento", sub: `Entra na aba Eventos, em ${ANO_PADRAO}, e é gravado no banco.`, tipo: "evento" },
   },
   remodelar: {
     title: "Remodelar",
     sub: "Os sites marcados para remodelar, ordenados por MRR — quem paga mais entra primeiro.",
-    add: "Novo site",
+    novo: { add: "Novo na fila", titulo: "Novo site na fila", sub: "Entra na aba Remodelar, já marcado para remodelar.", tipo: "associacao", fila: true },
   },
   prospectos: {
     title: "Sem site conosco",
     sub: "Associações do SoftaHub que ainda não têm site com a Softaliza — e poderiam ter.",
-    add: "Novo site",
+    novo: { add: "Novo site", titulo: "Novo site", sub: "Entra na lista de sites e é gravado no banco.", tipo: "associacao" },
   },
 };
 
@@ -460,12 +469,6 @@ const CONFORMIDADE_META = {
   abrir: { label: "Liberar", cls: "b-risk", dica: "domínio próprio bloqueado — deveria indexar" },
   "fora-do-ar": { label: "Fora do ar", cls: "b-none", dica: "não dá para avaliar" },
 };
-
-// O que entra sozinho num registro novo: os eventos que estão chegando são de
-// 2027, e site novo nasce personalizado — WordPress é o que estamos deixando
-// para trás. Quando a virada do ano pedir, é só mexer aqui.
-const ANO_PADRAO = 2027;
-const PLATAFORMA_PADRAO = "personalizado";
 
 // ---------------------------------------------------------------------------
 // Utilidades de apresentação
@@ -684,10 +687,16 @@ const ADD_FIELDS = [
   { name: "plataforma", label: "Plataforma", options: PLATAFORMA_OPTIONS, padrao: PLATAFORMA_PADRAO },
 ];
 
-function criarSite(v) {
+function criarSite(v, opts = {}) {
   const url = v.url.trim();
   const repetido = SITES.find((s) => !s.removido && displayLink(s.url).toLowerCase() === displayLink(url).toLowerCase());
   if (repetido) return { error: `"${repetido.nome}" já usa esse endereço.` };
+
+  // cadastrado pela aba Remodelar: já nasce na fila. Associação entra pela
+  // situação, que é o que Sites e Remodelar têm em comum; evento entra pelo
+  // envio, porque evento só vai para a fila quando alguém manda.
+  const evento = v.tipo === "evento";
+  const situacao = opts.fila && !evento ? "remodelar" : v.plataforma === "wordpress" ? "remodelar" : "construcao";
 
   const s = normalizarSite({
     id: `manual:${Date.now().toString(36)}`,
@@ -696,27 +705,35 @@ function criarSite(v) {
     nomeCompleto: v.nomeCompleto.trim() || null,
     url,
     plataforma: v.plataforma,
-    situacao: v.plataforma === "wordpress" ? "remodelar" : "construcao",
-    statusEvento: v.tipo === "evento" ? "a_acontecer" : null,
-    ano: v.tipo === "evento" ? ANO_PADRAO : null,
+    situacao,
+    statusEvento: evento ? "a_acontecer" : null,
+    ano: evento ? ANO_PADRAO : null,
+    enviadoFila: !!(opts.fila && evento),
     manual: true,
-    historico: [{ em: hoje(), texto: "Cadastrado à mão no painel." }],
+    historico: [{ em: hoje(), texto: opts.fila ? "Cadastrado à mão no painel, já na fila de remodelação." : "Cadastrado à mão no painel." }],
   });
   SITES.push(s);
   salvarSite(s);
   renderTudo();
-  return { message: `"${s.nome}" entrou nos sites.`, id: s.id };
+  const onde = opts.fila ? "na fila de remodelação" : evento ? "nos eventos" : "nos sites";
+  return { message: `"${s.nome}" entrou ${onde}.`, id: s.id };
 }
 
-let ADD_PREFILL = null;
+// de qual aba veio o cadastro em andamento, para o registro nascer com a cara
+// dela e voltar para ela depois de salvo
+let ADD_ORIGEM = "sites";
 
 function openAddDialog(prefill) {
-  ADD_PREFILL = prefill || null;
+  ADD_ORIGEM = PAGES[STATE.tab] && PAGES[STATE.tab].novo ? STATE.tab : "sites";
+  const cfg = PAGES[ADD_ORIGEM].novo;
   const dlg = document.getElementById("dlg-add");
   const body = document.getElementById("dlg-add-body");
+  document.getElementById("dlg-add-title").textContent = cfg.titulo;
+  document.getElementById("dlg-add-sub").textContent = cfg.sub;
   body.innerHTML =
     ADD_FIELDS.map((f) => {
-      const val = (prefill && prefill[f.name]) || f.padrao || "";
+      const daAba = f.name === "tipo" ? cfg.tipo : null;
+      const val = (prefill && prefill[f.name]) || daAba || f.padrao || "";
       const controle = f.options
         ? `<select id="add-${f.name}" name="${f.name}">${f.options.map((o) => `<option value="${o.value}" ${o.value === val ? "selected" : ""}>${o.label}</option>`).join("")}</select>`
         : `<input type="text" id="add-${f.name}" name="${f.name}" value="${esc(val)}" placeholder="${esc(f.ph || "")}" autocomplete="off" />`;
@@ -740,7 +757,7 @@ function submitAddDialog() {
     document.getElementById(`add-${missing.name}`).focus();
     return;
   }
-  const result = criarSite(values);
+  const result = criarSite(values, { fila: !!PAGES[ADD_ORIGEM].novo.fila });
   if (result.error) {
     errorBox.textContent = result.error;
     errorBox.classList.add("on");
@@ -749,8 +766,11 @@ function submitAddDialog() {
   errorBox.classList.remove("on");
   dlg.close();
   toast(result.message);
-  // leva para a aba Sites, com o novo já visível e aberto no detalhe
-  setTab("sites");
+  // fica na aba de onde veio, se o registro aparece nela; senão vai para a aba
+  // que o mostra — evento em Eventos, associação em Sites
+  const natural = values.tipo === "evento" ? "eventos" : "sites";
+  const cabe = ADD_ORIGEM === "remodelar" || ADD_ORIGEM === natural;
+  setTab(cabe ? ADD_ORIGEM : natural);
   openDrawer(result.id);
 }
 
@@ -1718,7 +1738,7 @@ function setTab(tab) {
   document.getElementById(`panel-${tab}`).classList.add("active");
   document.getElementById("page-title").textContent = PAGES[tab].title;
   document.getElementById("page-sub").textContent = PAGES[tab].sub;
-  document.getElementById("btn-add-text").textContent = PAGES[tab].add;
+  document.getElementById("btn-add-text").textContent = PAGES[tab].novo.add;
   RENDER[tab]();
   syncTableFit();
   window.scrollTo({ top: 0, behavior: "smooth" });
