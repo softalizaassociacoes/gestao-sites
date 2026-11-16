@@ -1685,6 +1685,14 @@ function download(name, text) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// quantas linhas a aba tem sem nenhum filtro, para o aviso do export
+const TOTAL_DA_ABA = {
+  sites: () => associacoes().length,
+  eventos: () => eventos().length,
+  remodelar: () => fila().length,
+  prospectos: () => prospectosAtuais().length,
+};
+
 function exportCsv() {
   let head;
   let rows;
@@ -1707,7 +1715,12 @@ function exportCsv() {
   }
   if (!rows.length) return toast("Não há linhas para exportar nessa visão.", "warn");
   download(name, [head, ...rows].map((r) => r.map(csvCell).join(";")).join("\r\n"));
-  toast(`${rows.length} linha(s) exportadas.`);
+  // o export é da visão atual, e filtro ligado passa despercebido: já saiu
+  // daqui um CSV com 3 linhas de uma fila de 34, por causa de uma busca
+  // esquecida na caixa. Quando o recorte é menor que a aba, o aviso diz isso.
+  const inteiro = TOTAL_DA_ABA[STATE.tab] ? TOTAL_DA_ABA[STATE.tab]() : rows.length;
+  if (rows.length < inteiro) toast(`${rows.length} de ${inteiro} linhas — a visão está filtrada.`, "warn");
+  else toast(`${rows.length} linha(s) exportadas.`);
 }
 
 // ---------------------------------------------------------------------------
