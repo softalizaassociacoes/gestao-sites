@@ -980,7 +980,7 @@ function identCell(s) {
 function renderSitesTable(list) {
   const tbody = document.getElementById("sites-table-body");
   if (!list.length) {
-    tbody.innerHTML = emptyRow(7, "Nada por aqui", "Nenhum site bate com esses filtros. Use “Novo site” para cadastrar.");
+    tbody.innerHTML = emptyRow(6, "Nada por aqui", "Nenhum site bate com esses filtros. Use “Novo site” para cadastrar.");
     return;
   }
   tbody.innerHTML = list
@@ -989,7 +989,6 @@ function renderSitesTable(list) {
       return `<tr class="abre" ${k}>
         <td class="ident-td" data-l="Site">${identCell(s)}</td>
         <td data-l="Plataforma">${selectField("s-plataforma", k, s.plataforma, PLATAFORMA_OPTIONS)}</td>
-        <td data-l="Situação">${selectField(`nv-select sit-${s.situacao} s-situacao`, k, s.situacao, SITUACAO_OPTIONS)}</td>
         <td data-l="Endereço">${linkCell("s-url", k, s.url)}</td>
         <td data-l="Checagens">${checksHtml(s, k)}</td>
         <td class="num" data-l="MRR">${s.mrr != null ? moeda(s.mrr) : '<span class="muted">—</span>'}</td>
@@ -1039,13 +1038,6 @@ function handleSitesEdit(ev) {
   if (el.classList.contains("s-plataforma")) {
     registrar(s, `Plataforma: ${labelOf(PLATAFORMA_OPTIONS, s.plataforma)} → ${labelOf(PLATAFORMA_OPTIONS, el.value)}.`);
     s.plataforma = el.value;
-  } else if (el.classList.contains("s-situacao")) {
-    registrar(s, `Situação: ${SITUACAO_META[s.situacao].label} → ${SITUACAO_META[el.value].label}.`);
-    s.situacao = el.value;
-    if (el.value === "remodelar" && s.foraDaFila && s.tipo !== "evento") {
-      s.foraDaFila = false;
-      registrar(s, "Devolvido à fila, pela situação voltar a Remodelar.");
-    }
   } else if (el.classList.contains("s-url")) {
     registrar(s, `Endereço: ${s.url || "(vazio)"} → ${el.value || "(vazio)"}.`);
     s.url = el.value;
