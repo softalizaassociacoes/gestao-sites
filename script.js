@@ -83,7 +83,8 @@ function normalizarSite(s) {
     enviadoFila: s.enviadoFila != null ? !!s.enviadoFila : SEMENTE_FILA_EVENTOS.has(s.id),
     // marcações manuais por cima da varredura; null = vale o automático
     checagemManual: {
-      ar: s.checagemManual && s.checagemManual.ar != null ? !!s.checagemManual.ar : null,
+      // "ar" tem três marcas: no ar, em validação com o cliente, fora do ar
+      ar: s.checagemManual && s.checagemManual.ar != null ? (s.checagemManual.ar === VALIDACAO ? VALIDACAO : !!s.checagemManual.ar) : null,
       rodape: s.checagemManual && s.checagemManual.rodape != null ? !!s.checagemManual.rodape : null,
       seo: s.checagemManual && s.checagemManual.seo != null ? !!s.checagemManual.seo : null,
       analytics: s.checagemManual && s.checagemManual.analytics != null ? !!s.checagemManual.analytics : null,
@@ -599,6 +600,9 @@ const ehSoftaliza = (u) => /(^|\/\/|\.)softaliza\.com\.br/i.test(u || "");
 const emSoftaliza = (s) => ehSoftaliza(s.url) || ehSoftaliza(s.seo && s.seo.urlFinal);
 const versaoInicial = (s) => emSoftaliza(s) && !s.linkDefinitivo;
 
+// terceiro estado da checagem de disponibilidade, só dela
+const VALIDACAO = "validacao";
+
 // cada checagem vale o que foi marcado à mão; na ausência, o que a varredura viu
 function checagem(s, qual) {
   const manual = s.checagemManual && s.checagemManual[qual];
@@ -609,10 +613,11 @@ function checagem(s, qual) {
   return { valor: s.seo ? s.seo.encontravel !== "nao" && s.seo.encontravel !== "fraco" : null, manual: false };
 }
 
-// As checagens, clicáveis: cada clique cicla automático → sim → não.
+// As checagens, clicáveis: cada clique cicla automático → sim → não, com um
+// degrau a mais na disponibilidade (validação com o cliente).
 // Marcado à mão ganha ponto, para distinguir do que veio da varredura.
 const CHECK_ROTULO = {
-  ar: { sim: "No ar", nao: "Fora do ar", vazio: "Ar ?" },
+  ar: { sim: "No ar", nao: "Fora do ar", vazio: "Ar ?", [VALIDACAO]: "Validação cliente" },
   rodape: { sim: "Rodapé", nao: "Sem rodapé", vazio: "Rodapé ?" },
   seo: { sim: "SEO ok", nao: "SEO ruim", vazio: "SEO ?" },
   analytics: { sim: "Analytics", nao: "Sem analytics", vazio: "Analytics ?" },
@@ -621,8 +626,9 @@ const CHECK_ROTULO = {
 function checkHtml(s, qual, k) {
   const { valor, manual } = checagem(s, qual);
   const r = CHECK_ROTULO[qual];
-  const cls = valor == null ? "c-unk" : valor ? "c-ok" : qual === "rodape" || qual === "analytics" ? "c-warn" : "c-bad";
-  const texto = valor == null ? r.vazio : valor ? r.sim : r.nao;
+  const cls =
+    valor === VALIDACAO ? "c-warn" : valor == null ? "c-unk" : valor ? "c-ok" : qual === "rodape" || qual === "analytics" ? "c-warn" : "c-bad";
+  const texto = valor === VALIDACAO ? r[VALIDACAO] : valor == null ? r.vazio : valor ? r.sim : r.nao;
   const origem = manual ? "marcado à mão" : s.verificadoEm ? `da varredura de ${s.verificadoEm}` : "sem checagem";
   return `<button type="button" class="check ${cls}${manual ? " c-man" : ""}" data-check="${qual}" ${k}
     title="${esc(`${texto} · ${origem} · clique para alternar`)}"><i></i>${texto}</button>`;
@@ -632,13 +638,18 @@ function checksHtml(s, k) {
   return `<div class="checks">${checkHtml(s, "ar", k)}${checkHtml(s, "rodape", k)}${checkHtml(s, "seo", k)}${checkHtml(s, "analytics", k)}</div>`;
 }
 
-// automático → sim → não → automático
+// automático → sim → não → automático. Em "ar" entra mais um degrau no meio,
+// a validação com o cliente: o site existe e responde, mas ainda não é o que
+// está valendo — não é "no ar" para cobrar, nem "fora do ar" para socorrer.
 function ciclarChecagem(s, qual) {
   const atual = s.checagemManual[qual];
-  const proximo = atual == null ? true : atual === true ? false : null;
+  const ciclo = qual === "ar" ? [null, true, VALIDACAO, false] : [null, true, false];
+  const i = ciclo.findIndex((v) => v === (atual == null ? null : atual));
+  const proximo = ciclo[(i + 1) % ciclo.length];
   s.checagemManual[qual] = proximo;
   const nome = { ar: "Disponibilidade", rodape: "Rodapé", seo: "SEO", analytics: "Analytics" }[qual];
-  registrar(s, proximo == null ? `${nome}: voltou a seguir a varredura.` : `${nome}: marcado à mão como ${proximo ? "ok" : "problema"}.`);
+  const comoFicou = proximo === VALIDACAO ? "em validação com o cliente" : proximo ? "ok" : "problema";
+  registrar(s, proximo == null ? `${nome}: voltou a seguir a varredura.` : `${nome}: marcado à mão como ${comoFicou}.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1099,7 +1110,7 @@ function renderEventosMetrics(list) {
   const aAcontecer = list.filter((s) => s.statusEvento === "a_acontecer").length;
   const acontecendo = list.filter((s) => s.statusEvento === "acontecendo").length;
   const realizado = list.filter((s) => s.statusEvento === "realizado").length;
-  const noAr = list.filter((s) => checagem(s, "ar").valor).length;
+  const noAr = list.filter((s) => checagem(s, "ar").valor === true).length;
   const inicial = list.filter(versaoInicial).length;
 
   document.getElementById("eventos-metrics").innerHTML = metricsHtml([
@@ -1546,7 +1557,7 @@ function renderDrawer(s) {
     </section>
     <section class="dsec"><h3>Checagens${s.verificadoEm ? ` · varredura de ${s.verificadoEm}` : ""}</h3>
       ${checksHtml(s, k)}
-      <div class="dica">Clique em cada uma para marcar à mão: automático → ok → problema. Com ponto, é marcação sua.</div>
+      <div class="dica">Clique em cada uma para marcar à mão: automático → ok → problema; na primeira, com validação do cliente no meio. Com ponto, é marcação sua.</div>
       <div class="dgrid" style="margin-top:12px">
         ${campo("Disponibilidade", `<div class="val">${ar}</div>`)}
         ${campo("Rodapé", `<div class="val">${rod}</div>`)}
