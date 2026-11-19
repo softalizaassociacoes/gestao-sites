@@ -404,7 +404,6 @@ const PAGES = {
 const PLATAFORMA_OPTIONS = [
   { value: "wordpress", label: "WordPress" },
   { value: "personalizado", label: "Personalizado" },
-  { value: "hotsite", label: "Hotsite" },
 ];
 
 const SITUACAO_OPTIONS = [
@@ -961,7 +960,6 @@ function renderSitesMetrics(list) {
     compositionHtml("Plataforma", [
       { cls: "s-off", label: "WordPress", count: list.filter((s) => s.plataforma === "wordpress").length },
       { cls: "s-accent", label: "Personalizado", count: list.filter((s) => s.plataforma === "personalizado").length },
-      { cls: "s-ok", label: "Hotsite", count: list.filter((s) => s.plataforma === "hotsite").length },
     ]);
 }
 

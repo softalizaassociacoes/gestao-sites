@@ -21,7 +21,7 @@ const UA_NAVEGADOR =
 
 const SITUACAO = { pronto: "Pronto", remodelar: "Remodelar", construcao: "Em construção", desativado: "Desativado" };
 const NOVA_VERSAO = { nao: "Não", pendente: "Pendente", validacao: "Em validação", migrado: "Migrado" };
-const PLATAFORMA = { wordpress: "WordPress", personalizado: "Personalizado", hotsite: "Hotsite" };
+const PLATAFORMA = { wordpress: "WordPress", personalizado: "Personalizado" };
 const STATUS_EVENTO = { a_acontecer: "A acontecer", acontecendo: "Acontecendo", realizado: "Realizado" };
 
 // Padrões de registro novo, iguais aos do painel.
@@ -175,7 +175,7 @@ const FERRAMENTAS = [
         endereco_novo: { type: "string", description: "Endereço da versão nova." },
         situacao: { type: "string", enum: ["pronto", "remodelar", "construcao", "desativado"] },
         nova_versao: { type: "string", enum: ["nao", "pendente", "validacao", "migrado"] },
-        plataforma: { type: "string", enum: ["wordpress", "personalizado", "hotsite"] },
+        plataforma: { type: "string", enum: ["wordpress", "personalizado"] },
         status_evento: { type: "string", enum: ["a_acontecer", "acontecendo", "realizado"] },
         ano: { type: "number" },
         mrr: { type: "number" },
@@ -218,7 +218,7 @@ const FERRAMENTAS = [
         nome_completo: { type: "string" },
         url: { type: "string" },
         tipo: { type: "string", enum: ["associacao", "evento"] },
-        plataforma: { type: "string", enum: ["wordpress", "personalizado", "hotsite"] },
+        plataforma: { type: "string", enum: ["wordpress", "personalizado"] },
         situacao: { type: "string", enum: ["pronto", "remodelar", "construcao", "desativado"] },
         ano: { type: "number", description: "Só para evento. Sem valor, entra como 2027." },
       },
